@@ -302,6 +302,13 @@
                     <label>Impact Power Multiplier <span class="range-value" id="impactPowerValue">15</span></label>
                     <input type="range" id="impactPower" min="1" max="30" step="1" value="15">
                 </div>
+                <div class="setting-item">
+                    <label>Spin Effect (Hook/Slice) <span class="range-value" id="spinValue">5</span></label>
+                    <input type="range" id="spinEffect" min="0" max="10" step="1" value="5">
+                    <div style="font-size: 11px; color: #aaa; margin-top: 3px;">
+                        0 = No curve | 5 = Realistic | 10 = Extreme curve
+                    </div>
+                </div>
             </div>
             
             <div class="setting-group">
@@ -367,6 +374,7 @@
             gravity: 9.81,          // m/s²
             airResistance: 0.5,     // factor 0-1
             impactPower: 15,        // multiplier for ball flight distance (1-30)
+            spinEffect: 5,          // 0-10: how much spin affects trajectory (Magnus effect)
             showDebug: false,       // Hidden by default to save space
             soundEnabled: true,
             soundVolume: 50,        // 0-100
@@ -524,6 +532,7 @@
         let ballFlight = {
             position: { x: 0, y: 0, z: 0 },     // 3D position in world space
             velocity: { x: 0, y: 0, z: 0 },     // Current velocity
+            spin: { x: 0, y: 0, z: 0 },         // Spin rate (rad/s) - causes Magnus effect
             flying: false,
             startTime: 0,
             lastUpdateTime: 0,  // For per-frame delta time
@@ -560,6 +569,7 @@
             gravity: document.getElementById('gravity'),
             airResistance: document.getElementById('airResistance'),
             impactPower: document.getElementById('impactPower'),
+            spinEffect: document.getElementById('spinEffect'),
             showDebug: document.getElementById('showDebug'),
             soundEnabled: document.getElementById('soundEnabled'),
             soundVolume: document.getElementById('soundVolume')
@@ -1307,8 +1317,54 @@
             
             addDebugMessage(`🔧 Launch V: [${vx.toFixed(1)}, ${vy.toFixed(1)}, ${vz.toFixed(1)}]`);
             
+            // CALCULATE BALL SPIN from club impact
+            // In golf, the club face angle and swing path create spin
+            const ballRadius = (settings.ballDiameter / 100) / 2; // Convert cm to meters, then radius
+            
+            // Safety check - prevent division by zero or invalid values
+            if (ballRadius <= 0 || !isFinite(vx) || !isFinite(vy) || !isFinite(vz)) {
+                addDebugMessage(`⚠️ Invalid velocity or ball size, skipping spin`);
+                ballFlight.spin = { x: 0, y: 0, z: 0 };
+            } else {
+                // Sidespin (hook/slice): X velocity creates spin around Y axis
+                // Right-to-left swing (negative X) = hook (left curve)
+                // Left-to-right swing (positive X) = slice (right curve)
+                // Typical golf sidespin: 50-300 rad/s
+                const sidespinRate = -(vx / ballRadius) * 0.02; // Reduced from 0.3 to 0.02
+                
+                // Backspin: Upward velocity creates backspin around X axis
+                // More loft = more backspin
+                // Typical golf backspin: 100-400 rad/s
+                const backspinRate = (vy / ballRadius) * 0.05; // Reduced from 0.8 to 0.05
+                
+                // Riflespin: Forward velocity creates minimal spin around Z axis (ignore in golf)
+                const riflespinRate = 0;
+                
+                // Ensure spin values are valid
+                ballFlight.spin = { 
+                    x: isFinite(backspinRate) ? backspinRate : 0,
+                    y: isFinite(sidespinRate) ? sidespinRate : 0,
+                    z: isFinite(riflespinRate) ? riflespinRate : 0
+                };
+            }
+            
+            const spinMagnitude = Math.sqrt(
+                ballFlight.spin.x**2 + ballFlight.spin.y**2
+            );
+            
+            // Show spin debug only if significant and spinEffect > 0
+            if (settings.spinEffect > 0 && spinMagnitude > 5) {
+                addDebugMessage(`🌀 Spin: ${spinMagnitude.toFixed(0)} rad/s`);
+                
+                if (Math.abs(ballFlight.spin.y) > 50) {
+                    const direction = ballFlight.spin.y < 0 ? 'SLICE→' : '←HOOK';
+                    addDebugMessage(`🌀 ${direction}`);
+                }
+            }
+            
             ballFlight.position = { x: 0, y: 0, z: 0 };  // Start at origin (ground level)
             ballFlight.velocity = { x: vx, y: vy, z: vz };
+            // Spin already set above in safety-checked section
             ballFlight.flying = true;
             ballFlight.startTime = Date.now();
             ballFlight.lastUpdateTime = Date.now();
@@ -1317,6 +1373,7 @@
             
             // Store in lastShot for persistent HUD display
             lastShot.velocity = { x: vx, y: vy, z: vz };
+            lastShot.spin = { x: ballFlight.spin.x, y: ballFlight.spin.y, z: ballFlight.spin.z };
             lastShot.timestamp = Date.now();
             
             // Debug: log launch velocity
@@ -1365,7 +1422,47 @@
             // Update velocity with gravity
             ballFlight.velocity.y += gravity * dt;
             
-            // TODO: Apply air resistance based on settings.airResistance
+            // APPLY MAGNUS FORCE (spin effect)
+            // Magnus force: F = k * (ω × v)
+            // This creates curve in flight (hook, slice, draw, fade)
+            if (settings.spinEffect > 0 && ballFlight.spin) {
+                // Drastically reduced coefficient - golf ball curves are subtle
+                const spinFactor = settings.spinEffect * 0.00001; // Reduced from 0.001 to 0.00001
+                
+                // Cross product: ω × v
+                // Spin is in rad/s, velocity is in m/s
+                const magnusX = spinFactor * (
+                    ballFlight.spin.y * ballFlight.velocity.z - 
+                    ballFlight.spin.z * ballFlight.velocity.y
+                );
+                const magnusY = spinFactor * (
+                    ballFlight.spin.z * ballFlight.velocity.x - 
+                    ballFlight.spin.x * ballFlight.velocity.z
+                );
+                const magnusZ = spinFactor * (
+                    ballFlight.spin.x * ballFlight.velocity.y - 
+                    ballFlight.spin.y * ballFlight.velocity.x
+                );
+                
+                // Apply Magnus force to velocity (only if values are valid)
+                if (isFinite(magnusX)) ballFlight.velocity.x += magnusX * dt;
+                if (isFinite(magnusY)) ballFlight.velocity.y += magnusY * dt;
+                if (isFinite(magnusZ)) ballFlight.velocity.z += magnusZ * dt;
+                
+                // Log Magnus effect in first 500ms
+                const timeSinceLaunch = Date.now() - ballFlight.startTime;
+                if (timeSinceLaunch < 500 && (magnusX !== 0 || magnusZ !== 0)) {
+                    addDebugMessage(`🌀 Magnus: X${magnusX > 0 ? '+' : ''}${magnusX.toFixed(2)}`);
+                }
+                
+                // Spin decays slightly due to air friction
+                const spinDecay = 0.98;
+                ballFlight.spin.x *= spinDecay;
+                ballFlight.spin.y *= spinDecay;
+                ballFlight.spin.z *= spinDecay;
+            }
+            
+            // Apply air resistance based on settings.airResistance
             // Air resistance is proportional to velocity squared
             if (settings.airResistance > 0) {
                 const dragFactor = settings.airResistance * 0.01; // Scale factor
@@ -1884,6 +1981,31 @@
                 ballFlight.position.z ** 2
             );
             ctx.fillText(`${dist.toFixed(1)}m`, pos.x, pos.y - ballRadius - 5);
+            
+            // Spin curve indicator
+            if (settings.spinEffect > 0 && ballFlight.spin) {
+                const sidespin = ballFlight.spin.y;
+                if (Math.abs(sidespin) > 20) {
+                    // Draw curve arrow
+                    const arrowY = pos.y + ballRadius + 15;
+                    ctx.strokeStyle = sidespin > 0 ? '#ff4444' : '#4444ff';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    
+                    if (sidespin > 0) {
+                        // Slice (curving right)
+                        ctx.moveTo(pos.x - 15, arrowY);
+                        ctx.quadraticCurveTo(pos.x, arrowY - 5, pos.x + 15, arrowY);
+                        ctx.fillText('→', pos.x + 20, arrowY + 5);
+                    } else {
+                        // Hook (curving left)
+                        ctx.moveTo(pos.x + 15, arrowY);
+                        ctx.quadraticCurveTo(pos.x, arrowY - 5, pos.x - 15, arrowY);
+                        ctx.fillText('←', pos.x - 20, arrowY + 5);
+                    }
+                    ctx.stroke();
+                }
+            }
         }
 
         function drawBallTrajectory() {
@@ -1949,20 +2071,44 @@
             ctx.fillText(`Launch velocity:`, centerX, centerY + 10);
             ctx.font = '16px monospace';
             ctx.fillText(`X:${ballFlight.velocity.x.toFixed(1)} Y:${ballFlight.velocity.y.toFixed(1)} Z:${ballFlight.velocity.z.toFixed(1)}`, centerX, centerY + 30);
+            
+            // Show spin information
+            if (lastShot.spin) {
+                ctx.font = '14px Arial';
+                ctx.fillStyle = '#00ffff';
+                const sidespin = lastShot.spin.y;
+                let spinText = 'Straight';
+                if (Math.abs(sidespin) > 50) {
+                    if (sidespin > 0) {
+                        spinText = `SLICE →`;
+                    } else {
+                        spinText = `← HOOK`;
+                    }
+                } else if (Math.abs(sidespin) > 20) {
+                    if (sidespin > 0) {
+                        spinText = `Fade →`;
+                    } else {
+                        spinText = `← Draw`;
+                    }
+                }
+                ctx.fillText(`Shot Shape: ${spinText}`, centerX, centerY + 50);
+            }
+            
             ctx.font = '12px Arial';
-            ctx.fillText(`(Enable Debug to see detailed logs)`, centerX, centerY + 50);
+            ctx.fillStyle = '#aaa';
+            ctx.fillText(`(Enable Debug to see detailed logs)`, centerX, centerY + 70);
             
             // Show last shot if available
             if (lastShot.timestamp) {
                 ctx.font = '14px Arial';
                 ctx.fillStyle = '#aaa';
                 const shotDate = new Date(lastShot.timestamp);
-                ctx.fillText(`Last shot: ${shotDate.toLocaleTimeString()}`, centerX, centerY + 75);
+                ctx.fillText(`Last shot: ${shotDate.toLocaleTimeString()}`, centerX, centerY + 95);
             }
             
             ctx.font = '16px Arial';
             ctx.fillStyle = '#4CAF50';
-            ctx.fillText('Tap Reset to play again', centerX, centerY + 105);
+            ctx.fillText('Tap Reset to play again', centerX, centerY + 125);
         }
 
         // ============================================
@@ -2008,7 +2154,8 @@
             if (lastShot.velocity) {
                 ctx.fillStyle = '#ff00ff';
                 ctx.font = 'bold 11px monospace';
-                ctx.fillText(`LAST: V[${lastShot.velocity.x.toFixed(1)}, ${lastShot.velocity.y.toFixed(1)}, ${lastShot.velocity.z.toFixed(1)}] ${settings.phoneOrientation}`, debugX, debugY + 43);
+                const spinLabel = lastShot.spin ? ` spin:${Math.abs(lastShot.spin.y).toFixed(0)}` : '';
+                ctx.fillText(`LAST: V[${lastShot.velocity.x.toFixed(1)}, ${lastShot.velocity.y.toFixed(1)}, ${lastShot.velocity.z.toFixed(1)}]${spinLabel}`, debugX, debugY + 43);
             }
             
             // Debug messages (scrolling log)
@@ -2041,8 +2188,8 @@
             ctx.fillStyle = '#00ff00';
             ctx.font = '10px monospace';
             ctx.fillText('Screen: X=L/R Y=UP/DOWN Z=AWAY', debugX, coordY + 12);
-            ctx.fillText('Ball should have: +Y (up) +Z (away)', debugX, coordY + 22);
-            ctx.fillText('If sideways: X is too big, Z too small', debugX, coordY + 32);
+            ctx.fillText(`Spin: ${settings.spinEffect}/10 | Side swing = Hook/Slice`, debugX, coordY + 22);
+            ctx.fillText('Large |X| = slice/hook, Large Z = straight', debugX, coordY + 32);
         }
 
         // ============================================
@@ -2108,6 +2255,9 @@
         settingsInputs.impactPower.addEventListener('input', function() {
             document.getElementById('impactPowerValue').textContent = this.value;
         });
+        settingsInputs.spinEffect.addEventListener('input', function() {
+            document.getElementById('spinValue').textContent = this.value;
+        });
         settingsInputs.soundVolume.addEventListener('input', function() {
             document.getElementById('volumeValue').textContent = this.value;
         });
@@ -2127,6 +2277,7 @@
             settingsInputs.gravity.value = settings.gravity;
             settingsInputs.airResistance.value = settings.airResistance;
             settingsInputs.impactPower.value = settings.impactPower;
+            settingsInputs.spinEffect.value = settings.spinEffect;
             settingsInputs.showDebug.checked = settings.showDebug;
             settingsInputs.soundEnabled.checked = settings.soundEnabled;
             settingsInputs.soundVolume.value = settings.soundVolume;
@@ -2138,6 +2289,7 @@
             document.getElementById('loftValue').textContent = settings.loftAngle;
             document.getElementById('airResValue').textContent = settings.airResistance.toFixed(1);
             document.getElementById('impactPowerValue').textContent = settings.impactPower;
+            document.getElementById('spinValue').textContent = settings.spinEffect;
             document.getElementById('volumeValue').textContent = settings.soundVolume;
             
             settingsModal.classList.add('active');
@@ -2158,6 +2310,7 @@
             settings.gravity = parseFloat(settingsInputs.gravity.value);
             settings.airResistance = parseFloat(settingsInputs.airResistance.value);
             settings.impactPower = parseFloat(settingsInputs.impactPower.value);
+            settings.spinEffect = parseFloat(settingsInputs.spinEffect.value);
             settings.showDebug = settingsInputs.showDebug.checked;
             settings.soundEnabled = settingsInputs.soundEnabled.checked;
             settings.soundVolume = parseFloat(settingsInputs.soundVolume.value);
