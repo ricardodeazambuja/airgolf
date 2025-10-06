@@ -1877,6 +1877,36 @@
             );
             
             // ================================================================
+            // CALCULATE AUTOMATIC SCALE based on swing bounds
+            // ================================================================
+            // Find the min/max of the swing path in 3D space
+            let minX = Infinity, maxX = -Infinity;
+            let minY = Infinity, maxY = -Infinity;
+            let minZ = Infinity, maxZ = -Infinity;
+            
+            swing.tipPath.forEach(point => {
+                minX = Math.min(minX, point.position.x);
+                maxX = Math.max(maxX, point.position.x);
+                minY = Math.min(minY, point.position.y);
+                maxY = Math.max(maxY, point.position.y);
+                minZ = Math.min(minZ, point.position.z);
+                maxZ = Math.max(maxZ, point.position.z);
+            });
+            
+            // Include ball position (0,0,0) in bounds
+            minX = Math.min(minX, 0);
+            maxX = Math.max(maxX, 0);
+            minY = Math.min(minY, 0);
+            maxY = Math.max(maxY, 0);
+            minZ = Math.min(minZ, 0);
+            maxZ = Math.max(maxZ, 0);
+            
+            // Calculate range for each axis
+            const rangeX = maxX - minX;
+            const rangeY = maxY - minY;
+            const rangeZ = maxZ - minZ;
+            
+            // ================================================================
             // LARGER REPLAY OVERLAY - 80% of screen for better visibility
             // ================================================================
             const margin = canvas.width * 0.1;
@@ -1884,6 +1914,79 @@
             const overlayY = canvas.height * 0.1;
             const overlayW = canvas.width - (margin * 2);  // 80% width
             const overlayH = canvas.height * 0.75;          // 75% height
+            
+            // Available drawing area (leave space for header and controls)
+            const drawAreaW = overlayW - 40;
+            const drawAreaH = overlayH - 180;  // Space for header, stats, progress bar
+            
+            // Calculate scale based on current camera view
+            // We want the swing to fit within the drawing area with some padding
+            const padding = 0.85;  // Use 85% of available space (15% padding)
+            let autoScale;
+            
+            switch(swingRecorder.cameraAngle) {
+                case 'top':
+                    // Top view shows X and Z
+                    const topRangeMax = Math.max(rangeX, rangeZ);
+                    autoScale = topRangeMax > 0 ? (Math.min(drawAreaW, drawAreaH) * padding) / topRangeMax : 200;
+                    break;
+                    
+                case 'front':
+                    // Front view shows X and Y
+                    const frontRangeMax = Math.max(rangeX, rangeY);
+                    autoScale = frontRangeMax > 0 ? (Math.min(drawAreaW, drawAreaH) * padding) / frontRangeMax : 200;
+                    break;
+                    
+                case 'left':
+                case 'right':
+                    // Side views show Z and Y
+                    const sideRangeMax = Math.max(rangeZ, rangeY);
+                    autoScale = sideRangeMax > 0 ? (Math.min(drawAreaW, drawAreaH) * padding) / sideRangeMax : 200;
+                    break;
+                    
+                case 'perspective':
+                default:
+                    // Perspective needs to consider all three dimensions
+                    // Use the projection dimensions to calculate scale
+                    const perspRangeW = rangeX + rangeZ * 0.5;  // X affected by Z in perspective
+                    const perspRangeH = rangeY + rangeZ * 0.3;  // Y affected by Z in perspective
+                    const perspMaxW = perspRangeW > 0 ? drawAreaW * padding / perspRangeW : 200;
+                    const perspMaxH = perspRangeH > 0 ? drawAreaH * padding / perspRangeH : 200;
+                    autoScale = Math.min(perspMaxW, perspMaxH);
+                    break;
+            }
+            
+            // Ensure scale is reasonable (not too small or too large)
+            autoScale = Math.max(50, Math.min(autoScale, 500));
+            
+            // Calculate center offset to center the swing in the view
+            let offsetX = 0, offsetY = 0;
+            
+            switch(swingRecorder.cameraAngle) {
+                case 'top':
+                    offsetX = -(minX + maxX) / 2;
+                    offsetY = -(minZ + maxZ) / 2;
+                    break;
+                case 'front':
+                    offsetX = -(minX + maxX) / 2;
+                    offsetY = -(minY + maxY) / 2;
+                    break;
+                case 'left':
+                    offsetX = -(minZ + maxZ) / 2;
+                    offsetY = -(minY + maxY) / 2;
+                    break;
+                case 'right':
+                    offsetX = -(minZ + maxZ) / 2;
+                    offsetY = -(minY + maxY) / 2;
+                    break;
+                case 'perspective':
+                    const perspCenterX = (minX + maxX) / 2;
+                    const perspCenterZ = (minZ + maxZ) / 2;
+                    const perspCenterY = (minY + maxY) / 2;
+                    offsetX = -(perspCenterX - perspCenterZ * 0.5);
+                    offsetY = -(perspCenterY + perspCenterZ * 0.3);
+                    break;
+            }
             
             // Background with slight transparency to see game behind
             ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
@@ -1920,15 +2023,19 @@
             ctx.fillText(`Distance: ${swing.distance ? swing.distance.toFixed(1) + 'm' : 'N/A'}`, overlayX + overlayW - 200, overlayY + 35);
             ctx.fillText(`Height: ${swing.maxHeight ? swing.maxHeight.toFixed(1) + 'm' : 'N/A'}`, overlayX + overlayW - 200, overlayY + 60);
             
+            // Scale info (debug)
+            ctx.font = '12px Arial';
+            ctx.fillStyle = '#888';
+            ctx.fillText(`Scale: ${autoScale.toFixed(0)}`, overlayX + overlayW - 200, overlayY + 85);
+            
             // ================================================================
             // 3D SWING VISUALIZATION with camera projections
             // ================================================================
             const viewX = overlayX + overlayW / 2;
-            const viewY = overlayY + overlayH / 2 + 20;
-            const scale = 200;  // Larger scale for better visibility
+            const viewY = overlayY + 140 + drawAreaH / 2;  // Centered in drawing area
             
             // Draw coordinate axes for reference
-            drawAxes(viewX, viewY, scale * 0.8, swingRecorder.cameraAngle);
+            drawAxes(viewX, viewY, autoScale * 0.6, swingRecorder.cameraAngle);
             
             // Project 3D swing path to 2D based on camera angle
             ctx.strokeStyle = 'rgba(255, 255, 0, 0.5)';
@@ -1936,7 +2043,7 @@
             ctx.beginPath();
             
             swing.tipPath.forEach((point, i) => {
-                const projected = projectPoint(point.position, swingRecorder.cameraAngle, scale);
+                const projected = projectPoint(point.position, swingRecorder.cameraAngle, autoScale, offsetX, offsetY);
                 const screenX = viewX + projected.x;
                 const screenY = viewY + projected.y;
                 
@@ -1956,7 +2063,7 @@
                 
                 for (let i = Math.max(0, frameIndex - 15); i < frameIndex; i++) {
                     const point = swing.tipPath[i];
-                    const projected = projectPoint(point.position, swingRecorder.cameraAngle, scale);
+                    const projected = projectPoint(point.position, swingRecorder.cameraAngle, autoScale, offsetX, offsetY);
                     const screenX = viewX + projected.x;
                     const screenY = viewY + projected.y;
                     
@@ -1974,12 +2081,12 @@
             // ================================================================
             if (frameIndex < swing.tipPath.length) {
                 const currentPoint = swing.tipPath[frameIndex];
-                const projected = projectPoint(currentPoint.position, swingRecorder.cameraAngle, scale);
+                const projected = projectPoint(currentPoint.position, swingRecorder.cameraAngle, autoScale, offsetX, offsetY);
                 const curX = viewX + projected.x;
                 const curY = viewY + projected.y;
                 
                 // Ball position (at origin)
-                const ballProj = projectPoint({x: 0, y: 0, z: 0}, swingRecorder.cameraAngle, scale);
+                const ballProj = projectPoint({x: 0, y: 0, z: 0}, swingRecorder.cameraAngle, autoScale, offsetX, offsetY);
                 const ballX = viewX + ballProj.x;
                 const ballY = viewY + ballProj.y;
                 
@@ -2016,7 +2123,7 @@
                         y: currentPoint.position.y + currentPoint.velocity.y * 0.05,
                         z: currentPoint.position.z + currentPoint.velocity.z * 0.05
                     };
-                    const velProj = projectPoint(velEnd, swingRecorder.cameraAngle, scale);
+                    const velProj = projectPoint(velEnd, swingRecorder.cameraAngle, autoScale, offsetX, offsetY);
                     const velX = viewX + velProj.x;
                     const velY = viewY + velProj.y;
                     
@@ -2075,40 +2182,45 @@
         // ================================================================
         // Helper: Project 3D point to 2D based on camera angle
         // ================================================================
-        function projectPoint(point, cameraAngle, scale) {
+        function projectPoint(point, cameraAngle, scale, offsetX = 0, offsetY = 0) {
             let x, y;
+            
+            // Apply centering offset
+            const px = point.x + offsetX;
+            const py = point.y + offsetY;
+            const pz = point.z;
             
             switch(cameraAngle) {
                 case 'top':
                     // Looking down from above (bird's eye)
-                    x = point.x * scale;
-                    y = -point.z * scale;  // Z goes down in screen space
+                    x = px * scale;
+                    y = -pz * scale;  // Z goes down in screen space
                     break;
                     
                 case 'front':
                     // Looking at golfer from front
-                    x = point.x * scale;
-                    y = -point.y * scale;  // Y goes up
+                    x = px * scale;
+                    y = -py * scale;  // Y goes up
                     break;
                     
                 case 'left':
                     // Looking from left side
-                    x = point.z * scale;
-                    y = -point.y * scale;
+                    x = pz * scale;
+                    y = -py * scale;
                     break;
                     
                 case 'right':
                     // Looking from right side
-                    x = -point.z * scale;
-                    y = -point.y * scale;
+                    x = -pz * scale;
+                    y = -py * scale;
                     break;
                     
                 case 'perspective':
                 default:
                     // 3D perspective view (default)
                     // Isometric-style projection
-                    x = (point.x - point.z * 0.5) * scale;
-                    y = (-point.y - point.z * 0.3) * scale;
+                    x = (px - pz * 0.5) * scale;
+                    y = (-py - pz * 0.3) * scale;
                     break;
             }
             
