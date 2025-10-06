@@ -212,6 +212,10 @@
         <div id="controls">
             <button id="setBallBtn">⛳ Tee Up</button>
             <div style="display: flex; gap: 10px; justify-content: center;">
+                <button id="recordBtn">🎥 Record Swing</button>
+                <button id="replayBtn" disabled>▶️ Replay</button>
+            </div>
+            <div style="display: flex; gap: 10px; justify-content: center;">
                 <button id="settingsBtn">Settings</button>
                 <button id="resetBtn" disabled>Reset</button>
             </div>
@@ -524,6 +528,19 @@
             hitTime: 0,
             impactVelocity: { x: 0, y: 0, z: 0 }  // Velocity at impact
         };
+        
+        // ============================================
+        // SWING RECORDING & REPLAY
+        // ============================================
+        let swingRecorder = {
+            isRecording: false,
+            recordedSwings: [],      // Array of saved swing recordings
+            currentRecording: null,  // Current swing being recorded
+            replayMode: false,
+            replayIndex: 0,          // Which saved swing to replay
+            replayProgress: 0,       // Playback position (0-1)
+            replaySpeed: 1.0         // Playback speed multiplier
+        };
 
         // ============================================
         // BALL FLIGHT PHYSICS
@@ -549,6 +566,8 @@
         const setBallBtn = document.getElementById('setBallBtn');
         const resetBtn = document.getElementById('resetBtn');
         const settingsBtn = document.getElementById('settingsBtn');
+        const recordBtn = document.getElementById('recordBtn');
+        const replayBtn = document.getElementById('replayBtn');
         const statusDiv = document.getElementById('status');
         
         // Settings Modal Elements
@@ -861,6 +880,15 @@
                 timestamp: now
             });
             
+            // Record for swing replay if recording is active
+            if (swingRecorder.isRecording && swingRecorder.currentRecording && ballPosition.set) {
+                swingRecorder.currentRecording.tipPath.push({
+                    position: { ...clubTipTracking.tipPosition },
+                    velocity: { ...clubTipTracking.tipVelocity },
+                    timestamp: now
+                });
+            }
+            
             // Keep only last 2 seconds of history
             const twoSecondsAgo = now - 2000;
             clubTipTracking.history = clubTipTracking.history.filter(
@@ -1019,6 +1047,17 @@
             setBallBtn.disabled = true;
             updateStatus('✓ Ball Set! Swing now!');
             
+            // Start swing recording if enabled
+            if (swingRecorder.isRecording) {
+                swingRecorder.currentRecording = {
+                    tipPath: [],        // Club tip positions
+                    startTime: Date.now(),
+                    ballPosition: { ...ballPosition },
+                    settings: { ...settings }
+                };
+                addDebugMessage(`🎥 Recording swing...`);
+            }
+            
             // Debug
             addDebugMessage(`⚪ Ball set! Tip at [${clubTipTracking.tipPosition.x.toFixed(3)}, ${clubTipTracking.tipPosition.y.toFixed(3)}, ${clubTipTracking.tipPosition.z.toFixed(3)}]`);
             addDebugMessage(`📱 Grip: ${settings.phoneOrientation === 'edge' ? 'Edge First 🏌️' : 'Screen First 📱'}`);
@@ -1080,6 +1119,12 @@
         function handleSwingTimeout() {
             // Play alarm sound
             playAlarmSound();
+            
+            // Cancel current recording (swing timed out - no hit)
+            if (swingRecorder.isRecording && swingRecorder.currentRecording) {
+                addDebugMessage(`🎥 Recording canceled (timeout)`);
+                swingRecorder.currentRecording = null;
+            }
             
             // Force reset
             currentState = GameState.READY_TO_SET_BALL;
@@ -1158,6 +1203,17 @@
             
             // Play hit sound
             playHitSound();
+            
+            // Save recorded swing if recording was active
+            if (swingRecorder.isRecording && swingRecorder.currentRecording) {
+                swingRecorder.currentRecording.endTime = Date.now();
+                swingRecorder.currentRecording.impactVelocity = { ...swingData.impactVelocity };
+                swingRecorder.currentRecording.distance = 0; // Will be updated when ball lands
+                swingRecorder.recordedSwings.push(swingRecorder.currentRecording);
+                addDebugMessage(`🎥 Swing saved! Total: ${swingRecorder.recordedSwings.length}`);
+                replayBtn.disabled = false; // Enable replay button
+                swingRecorder.currentRecording = null;
+            }
             
             currentState = GameState.BALL_FLYING;
             updateStatus('🏌️ HIT! Ball is flying...');
@@ -1512,6 +1568,15 @@
                 
                 addDebugMessage(`⛳ LANDED! ${ballFlight.landingDistance.toFixed(2)}m, h:${ballFlight.maxHeight.toFixed(2)}m`);
                 
+                // Update last recorded swing with final distance
+                if (swingRecorder.recordedSwings.length > 0) {
+                    const lastSwing = swingRecorder.recordedSwings[swingRecorder.recordedSwings.length - 1];
+                    if (lastSwing.distance === 0) {
+                        lastSwing.distance = ballFlight.landingDistance;
+                        lastSwing.maxHeight = ballFlight.maxHeight;
+                    }
+                }
+                
                 // Check if ball never left ground
                 if (ballFlight.maxHeight < 0.01) {
                     addDebugMessage(`⚠️ BUG: Ball never left ground! Check Y velocity at launch`);
@@ -1593,8 +1658,127 @@
             // Draw debug info on canvas if enabled
             drawDebugInfo();
             
+            // Draw swing replay if active
+            if (swingRecorder.replayMode) {
+                drawSwingReplay(deltaTime);
+            }
+            
             // Continue rendering loop
             requestAnimationFrame(render);
+        }
+
+        function drawSwingReplay(deltaTime) {
+            // Get the swing to replay
+            const swing = swingRecorder.recordedSwings[swingRecorder.replayIndex];
+            if (!swing || !swing.tipPath || swing.tipPath.length === 0) {
+                return;
+            }
+            
+            // Update replay progress
+            swingRecorder.replayProgress += (deltaTime / 1000) * swingRecorder.replaySpeed;
+            const duration = (swing.endTime - swing.startTime) / 1000; // seconds
+            
+            // Loop replay
+            if (swingRecorder.replayProgress >= duration) {
+                swingRecorder.replayProgress = 0;
+            }
+            
+            // Calculate which frame to show
+            const frameIndex = Math.floor(
+                (swingRecorder.replayProgress / duration) * swing.tipPath.length
+            );
+            
+            // Draw replay overlay
+            const overlayX = canvas.width * 0.05;
+            const overlayY = canvas.height * 0.15;
+            const overlayW = canvas.width * 0.4;
+            const overlayH = canvas.height * 0.4;
+            
+            // Background
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+            ctx.fillRect(overlayX, overlayY, overlayW, overlayH);
+            
+            // Title
+            ctx.fillStyle = '#ffff00';
+            ctx.font = 'bold 18px Arial';
+            ctx.textAlign = 'left';
+            ctx.fillText(`📼 Replay ${swingRecorder.replayIndex + 1}/${swingRecorder.recordedSwings.length}`, overlayX + 10, overlayY + 25);
+            
+            // Swing info
+            ctx.font = '14px Arial';
+            ctx.fillStyle = 'white';
+            ctx.fillText(`Distance: ${swing.distance ? swing.distance.toFixed(1) + 'm' : 'N/A'}`, overlayX + 10, overlayY + 50);
+            ctx.fillText(`Height: ${swing.maxHeight ? swing.maxHeight.toFixed(1) + 'm' : 'N/A'}`, overlayX + 10, overlayY + 70);
+            
+            // Draw swing path
+            const pathX = overlayX + overlayW / 2;
+            const pathY = overlayY + overlayH - 20;
+            const scale = 150;
+            
+            // Full swing trail (faded)
+            ctx.strokeStyle = 'rgba(255, 255, 0, 0.3)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            
+            swing.tipPath.forEach((point, i) => {
+                const screenX = pathX + point.position.x * scale;
+                const screenY = pathY - point.position.y * scale;
+                
+                if (i === 0) {
+                    ctx.moveTo(screenX, screenY);
+                } else {
+                    ctx.lineTo(screenX, screenY);
+                }
+            });
+            ctx.stroke();
+            
+            // Current position (highlighted)
+            if (frameIndex < swing.tipPath.length) {
+                const currentPoint = swing.tipPath[frameIndex];
+                const curX = pathX + currentPoint.position.x * scale;
+                const curY = pathY - currentPoint.position.y * scale;
+                
+                // Highlight ball
+                ctx.fillStyle = 'white';
+                ctx.strokeStyle = 'yellow';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(pathX, pathY, 6, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+                
+                // Club tip
+                ctx.fillStyle = 'lime';
+                ctx.beginPath();
+                ctx.arc(curX, curY, 8, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Line to ball
+                ctx.strokeStyle = 'rgba(0, 255, 0, 0.5)';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(pathX, pathY);
+                ctx.lineTo(curX, curY);
+                ctx.stroke();
+            }
+            
+            // Progress bar
+            const barX = overlayX + 10;
+            const barY = overlayY + overlayH - 15;
+            const barW = overlayW - 20;
+            const barH = 8;
+            
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.fillRect(barX, barY, barW, barH);
+            
+            ctx.fillStyle = '#4CAF50';
+            ctx.fillRect(barX, barY, barW * (swingRecorder.replayProgress / duration), barH);
+            
+            // Controls hint
+            ctx.fillStyle = '#aaa';
+            ctx.font = '11px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('Tap ⏹️ to stop', overlayX + overlayW / 2, overlayY + overlayH + 15);
         }
 
         function drawGround() {
@@ -1696,6 +1880,10 @@
                 ctx.font = '12px Arial';
                 ctx.fillStyle = '#999';
                 ctx.fillText('Adjust "Phone Orientation" in Settings if needed', x, y + 45);
+                
+                ctx.font = 'bold 11px Arial';
+                ctx.fillStyle = '#ff6666';
+                ctx.fillText('⚠️ We take no responsibility for broken phones! 😅🏌️', x, y + 65);
                 return;
             }
             
@@ -2196,6 +2384,47 @@
         // PART 8: RESET FUNCTIONALITY
         // ============================================
         resetBtn.addEventListener('click', resetGame);
+        
+        // Record button - toggle recording mode
+        recordBtn.addEventListener('click', function() {
+            swingRecorder.isRecording = !swingRecorder.isRecording;
+            
+            if (swingRecorder.isRecording) {
+                recordBtn.textContent = '⏺️ Recording ON';
+                recordBtn.style.background = '#ff4444';
+                updateStatus('🎥 Recording mode ON - your next swing will be saved!');
+            } else {
+                recordBtn.textContent = '🎥 Record Swing';
+                recordBtn.style.background = '';
+                updateStatus('🎥 Recording mode OFF');
+                // Cancel any in-progress recording
+                if (swingRecorder.currentRecording) {
+                    swingRecorder.currentRecording = null;
+                }
+            }
+        });
+        
+        // Replay button - show swing replay
+        replayBtn.addEventListener('click', function() {
+            if (swingRecorder.recordedSwings.length === 0) {
+                updateStatus('⚠️ No recorded swings to replay!');
+                return;
+            }
+            
+            swingRecorder.replayMode = !swingRecorder.replayMode;
+            
+            if (swingRecorder.replayMode) {
+                swingRecorder.replayProgress = 0;
+                swingRecorder.replayIndex = swingRecorder.recordedSwings.length - 1; // Show most recent
+                replayBtn.textContent = '⏹️ Stop Replay';
+                replayBtn.style.background = '#4444ff';
+                updateStatus(`▶️ Replaying swing ${swingRecorder.replayIndex + 1}/${swingRecorder.recordedSwings.length}`);
+            } else {
+                replayBtn.textContent = '▶️ Replay';
+                replayBtn.style.background = '';
+                updateStatus('⏹️ Replay stopped');
+            }
+        });
 
         function resetGame() {
             // TODO: Reset all state and start over
