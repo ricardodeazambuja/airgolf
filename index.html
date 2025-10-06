@@ -542,7 +542,8 @@
             replayMode: false,
             replayIndex: 0,          // Which saved swing to replay
             replayProgress: 0,       // Playback position (0-1)
-            replaySpeed: 1.0         // Playback speed multiplier
+            replaySpeed: 1.0,        // Playback speed multiplier
+            cameraAngle: 'perspective' // Current camera view: 'perspective', 'top', 'front', 'left', 'right'
         };
 
         // ============================================
@@ -1875,41 +1876,69 @@
                 (swingRecorder.replayProgress / duration) * swing.tipPath.length
             );
             
-            // Draw replay overlay
-            const overlayX = canvas.width * 0.05;
-            const overlayY = canvas.height * 0.15;
-            const overlayW = canvas.width * 0.4;
-            const overlayH = canvas.height * 0.4;
+            // ================================================================
+            // LARGER REPLAY OVERLAY - 80% of screen for better visibility
+            // ================================================================
+            const margin = canvas.width * 0.1;
+            const overlayX = margin;
+            const overlayY = canvas.height * 0.1;
+            const overlayW = canvas.width - (margin * 2);  // 80% width
+            const overlayH = canvas.height * 0.75;          // 75% height
             
-            // Background
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+            // Background with slight transparency to see game behind
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
             ctx.fillRect(overlayX, overlayY, overlayW, overlayH);
             
-            // Title
+            // Border
+            ctx.strokeStyle = '#ffff00';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(overlayX, overlayY, overlayW, overlayH);
+            
+            // ================================================================
+            // HEADER: Title and stats
+            // ================================================================
             ctx.fillStyle = '#ffff00';
-            ctx.font = 'bold 18px Arial';
+            ctx.font = 'bold 24px Arial';
             ctx.textAlign = 'left';
-            ctx.fillText(`📼 Replay ${swingRecorder.replayIndex + 1}/${swingRecorder.recordedSwings.length}`, overlayX + 10, overlayY + 25);
+            ctx.fillText(`📼 Replay ${swingRecorder.replayIndex + 1}/${swingRecorder.recordedSwings.length}`, overlayX + 20, overlayY + 35);
             
-            // Swing info
-            ctx.font = '14px Arial';
+            // Camera view indicator
+            ctx.font = 'bold 18px Arial';
+            ctx.fillStyle = '#00ffff';
+            const viewNames = {
+                'perspective': '📐 Perspective',
+                'top': '⬇️ Top View',
+                'front': '👁️ Front View',
+                'left': '◀️ Left Side',
+                'right': '▶️ Right Side'
+            };
+            ctx.fillText(viewNames[swingRecorder.cameraAngle], overlayX + 20, overlayY + 65);
+            
+            // Swing stats
+            ctx.font = '16px Arial';
             ctx.fillStyle = 'white';
-            ctx.fillText(`Distance: ${swing.distance ? swing.distance.toFixed(1) + 'm' : 'N/A'}`, overlayX + 10, overlayY + 50);
-            ctx.fillText(`Height: ${swing.maxHeight ? swing.maxHeight.toFixed(1) + 'm' : 'N/A'}`, overlayX + 10, overlayY + 70);
+            ctx.fillText(`Distance: ${swing.distance ? swing.distance.toFixed(1) + 'm' : 'N/A'}`, overlayX + overlayW - 200, overlayY + 35);
+            ctx.fillText(`Height: ${swing.maxHeight ? swing.maxHeight.toFixed(1) + 'm' : 'N/A'}`, overlayX + overlayW - 200, overlayY + 60);
             
-            // Draw swing path
-            const pathX = overlayX + overlayW / 2;
-            const pathY = overlayY + overlayH - 20;
-            const scale = 150;
+            // ================================================================
+            // 3D SWING VISUALIZATION with camera projections
+            // ================================================================
+            const viewX = overlayX + overlayW / 2;
+            const viewY = overlayY + overlayH / 2 + 20;
+            const scale = 200;  // Larger scale for better visibility
             
-            // Full swing trail (faded)
-            ctx.strokeStyle = 'rgba(255, 255, 0, 0.3)';
-            ctx.lineWidth = 2;
+            // Draw coordinate axes for reference
+            drawAxes(viewX, viewY, scale * 0.8, swingRecorder.cameraAngle);
+            
+            // Project 3D swing path to 2D based on camera angle
+            ctx.strokeStyle = 'rgba(255, 255, 0, 0.5)';
+            ctx.lineWidth = 3;
             ctx.beginPath();
             
             swing.tipPath.forEach((point, i) => {
-                const screenX = pathX + point.position.x * scale;
-                const screenY = pathY - point.position.y * scale;
+                const projected = projectPoint(point.position, swingRecorder.cameraAngle, scale);
+                const screenX = viewX + projected.x;
+                const screenY = viewY + projected.y;
                 
                 if (i === 0) {
                     ctx.moveTo(screenX, screenY);
@@ -1919,41 +1948,105 @@
             });
             ctx.stroke();
             
+            // Draw trail with fading effect
+            if (frameIndex >= 5) {
+                ctx.strokeStyle = 'rgba(0, 255, 255, 0.6)';
+                ctx.lineWidth = 4;
+                ctx.beginPath();
+                
+                for (let i = Math.max(0, frameIndex - 15); i < frameIndex; i++) {
+                    const point = swing.tipPath[i];
+                    const projected = projectPoint(point.position, swingRecorder.cameraAngle, scale);
+                    const screenX = viewX + projected.x;
+                    const screenY = viewY + projected.y;
+                    
+                    if (i === Math.max(0, frameIndex - 15)) {
+                        ctx.moveTo(screenX, screenY);
+                    } else {
+                        ctx.lineTo(screenX, screenY);
+                    }
+                }
+                ctx.stroke();
+            }
+            
+            // ================================================================
             // Current position (highlighted)
+            // ================================================================
             if (frameIndex < swing.tipPath.length) {
                 const currentPoint = swing.tipPath[frameIndex];
-                const curX = pathX + currentPoint.position.x * scale;
-                const curY = pathY - currentPoint.position.y * scale;
+                const projected = projectPoint(currentPoint.position, swingRecorder.cameraAngle, scale);
+                const curX = viewX + projected.x;
+                const curY = viewY + projected.y;
                 
-                // Highlight ball
+                // Ball position (at origin)
+                const ballProj = projectPoint({x: 0, y: 0, z: 0}, swingRecorder.cameraAngle, scale);
+                const ballX = viewX + ballProj.x;
+                const ballY = viewY + ballProj.y;
+                
+                // Draw ball
                 ctx.fillStyle = 'white';
                 ctx.strokeStyle = 'yellow';
                 ctx.lineWidth = 3;
                 ctx.beginPath();
-                ctx.arc(pathX, pathY, 6, 0, Math.PI * 2);
+                ctx.arc(ballX, ballY, 10, 0, Math.PI * 2);
                 ctx.fill();
                 ctx.stroke();
                 
-                // Club tip
+                // Draw club tip
                 ctx.fillStyle = 'lime';
-                ctx.beginPath();
-                ctx.arc(curX, curY, 8, 0, Math.PI * 2);
-                ctx.fill();
-                
-                // Line to ball
-                ctx.strokeStyle = 'rgba(0, 255, 0, 0.5)';
+                ctx.strokeStyle = 'white';
                 ctx.lineWidth = 2;
                 ctx.beginPath();
-                ctx.moveTo(pathX, pathY);
+                ctx.arc(curX, curY, 12, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+                
+                // Line from club to ball
+                ctx.strokeStyle = 'rgba(0, 255, 0, 0.6)';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(ballX, ballY);
                 ctx.lineTo(curX, curY);
                 ctx.stroke();
+                
+                // Show velocity vector
+                if (currentPoint.velocity) {
+                    const velEnd = {
+                        x: currentPoint.position.x + currentPoint.velocity.x * 0.05,
+                        y: currentPoint.position.y + currentPoint.velocity.y * 0.05,
+                        z: currentPoint.position.z + currentPoint.velocity.z * 0.05
+                    };
+                    const velProj = projectPoint(velEnd, swingRecorder.cameraAngle, scale);
+                    const velX = viewX + velProj.x;
+                    const velY = viewY + velProj.y;
+                    
+                    // Velocity arrow
+                    ctx.strokeStyle = 'rgba(255, 0, 255, 0.8)';
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.moveTo(curX, curY);
+                    ctx.lineTo(velX, velY);
+                    ctx.stroke();
+                    
+                    // Arrowhead
+                    const angle = Math.atan2(velY - curY, velX - curX);
+                    ctx.fillStyle = 'rgba(255, 0, 255, 0.8)';
+                    ctx.beginPath();
+                    ctx.moveTo(velX, velY);
+                    ctx.lineTo(velX - 10 * Math.cos(angle - Math.PI/6), velY - 10 * Math.sin(angle - Math.PI/6));
+                    ctx.lineTo(velX - 10 * Math.cos(angle + Math.PI/6), velY - 10 * Math.sin(angle + Math.PI/6));
+                    ctx.closePath();
+                    ctx.fill();
+                }
             }
             
-            // Progress bar
-            const barX = overlayX + 10;
-            const barY = overlayY + overlayH - 15;
-            const barW = overlayW - 20;
-            const barH = 8;
+            // ================================================================
+            // PROGRESS BAR
+            // ================================================================
+            const barX = overlayX + 20;
+            const barY = overlayY + overlayH - 40;
+            const barW = overlayW - 40;
+            const barH = 10;
             
             ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
             ctx.fillRect(barX, barY, barW, barH);
@@ -1961,11 +2054,99 @@
             ctx.fillStyle = '#4CAF50';
             ctx.fillRect(barX, barY, barW * (swingRecorder.replayProgress / duration), barH);
             
-            // Controls hint
-            ctx.fillStyle = '#aaa';
-            ctx.font = '11px Arial';
+            // Progress text
+            ctx.fillStyle = 'white';
+            ctx.font = '12px Arial';
             ctx.textAlign = 'center';
-            ctx.fillText('Tap ⏹️ to stop', overlayX + overlayW / 2, overlayY + overlayH + 15);
+            ctx.fillText(`${(swingRecorder.replayProgress).toFixed(1)}s / ${duration.toFixed(1)}s`, overlayX + overlayW / 2, barY - 5);
+            
+            // ================================================================
+            // CONTROLS
+            // ================================================================
+            ctx.fillStyle = '#aaa';
+            ctx.font = 'bold 14px Arial';
+            ctx.textAlign = 'left';
+            ctx.fillText('⏹️ Stop', overlayX + 20, overlayY + overlayH - 10);
+            
+            ctx.textAlign = 'right';
+            ctx.fillText('🔄 Change View (tap replay button)', overlayX + overlayW - 20, overlayY + overlayH - 10);
+        }
+        
+        // ================================================================
+        // Helper: Project 3D point to 2D based on camera angle
+        // ================================================================
+        function projectPoint(point, cameraAngle, scale) {
+            let x, y;
+            
+            switch(cameraAngle) {
+                case 'top':
+                    // Looking down from above (bird's eye)
+                    x = point.x * scale;
+                    y = -point.z * scale;  // Z goes down in screen space
+                    break;
+                    
+                case 'front':
+                    // Looking at golfer from front
+                    x = point.x * scale;
+                    y = -point.y * scale;  // Y goes up
+                    break;
+                    
+                case 'left':
+                    // Looking from left side
+                    x = point.z * scale;
+                    y = -point.y * scale;
+                    break;
+                    
+                case 'right':
+                    // Looking from right side
+                    x = -point.z * scale;
+                    y = -point.y * scale;
+                    break;
+                    
+                case 'perspective':
+                default:
+                    // 3D perspective view (default)
+                    // Isometric-style projection
+                    x = (point.x - point.z * 0.5) * scale;
+                    y = (-point.y - point.z * 0.3) * scale;
+                    break;
+            }
+            
+            return { x, y };
+        }
+        
+        // ================================================================
+        // Helper: Draw coordinate axes for reference
+        // ================================================================
+        function drawAxes(centerX, centerY, length, cameraAngle) {
+            const axes = [
+                { dir: {x: 1, y: 0, z: 0}, color: '#ff4444', label: 'X' },  // Red
+                { dir: {x: 0, y: 1, z: 0}, color: '#44ff44', label: 'Y' },  // Green
+                { dir: {x: 0, y: 0, z: 1}, color: '#4444ff', label: 'Z' }   // Blue
+            ];
+            
+            ctx.lineWidth = 2;
+            ctx.font = 'bold 14px Arial';
+            
+            axes.forEach(axis => {
+                const start = projectPoint({x: 0, y: 0, z: 0}, cameraAngle, length);
+                const end = projectPoint({
+                    x: axis.dir.x * 1,
+                    y: axis.dir.y * 1,
+                    z: axis.dir.z * 1
+                }, cameraAngle, length);
+                
+                ctx.strokeStyle = axis.color;
+                ctx.beginPath();
+                ctx.moveTo(centerX + start.x, centerY + start.y);
+                ctx.lineTo(centerX + end.x, centerY + end.y);
+                ctx.stroke();
+                
+                // Label
+                ctx.fillStyle = axis.color;
+                ctx.textAlign = 'center';
+                ctx.fillText(axis.label, centerX + end.x, centerY + end.y - 5);
+            });
         }
 
         function drawGround() {
@@ -2598,18 +2779,42 @@
                 return;
             }
             
-            swingRecorder.replayMode = !swingRecorder.replayMode;
-            
+            // If already in replay mode, cycle camera view
             if (swingRecorder.replayMode) {
-                swingRecorder.replayProgress = 0;
-                swingRecorder.replayIndex = swingRecorder.recordedSwings.length - 1; // Show most recent
-                replayBtn.textContent = '⏹️ Stop Replay';
-                replayBtn.style.background = '#4444ff';
-                updateStatus(`▶️ Replaying swing ${swingRecorder.replayIndex + 1}/${swingRecorder.recordedSwings.length}`);
-            } else {
+                const views = ['perspective', 'top', 'front', 'left', 'right'];
+                const currentIndex = views.indexOf(swingRecorder.cameraAngle);
+                const nextIndex = (currentIndex + 1) % views.length;
+                swingRecorder.cameraAngle = views[nextIndex];
+                
+                const viewNames = {
+                    'perspective': '📐 Perspective',
+                    'top': '⬇️ Top View',
+                    'front': '👁️ Front View',
+                    'left': '◀️ Left Side',
+                    'right': '▶️ Right Side'
+                };
+                updateStatus(`🔄 Camera: ${viewNames[swingRecorder.cameraAngle]}`);
+                return;
+            }
+            
+            // Start replay mode
+            swingRecorder.replayMode = true;
+            swingRecorder.replayProgress = 0;
+            swingRecorder.replayIndex = swingRecorder.recordedSwings.length - 1; // Show most recent
+            swingRecorder.cameraAngle = 'perspective'; // Reset to default view
+            replayBtn.textContent = '🔄 Change View';
+            replayBtn.style.background = '#4444ff';
+            updateStatus(`▶️ Replaying swing ${swingRecorder.replayIndex + 1}/${swingRecorder.recordedSwings.length} | Tap 🔄 to change camera`);
+        });
+        
+        // Add stop replay button (long press or separate button could work too)
+        canvas.addEventListener('click', function(e) {
+            // If in replay mode and user clicks on canvas, stop replay
+            if (swingRecorder.replayMode) {
+                swingRecorder.replayMode = false;
                 replayBtn.textContent = '▶️ Replay';
                 replayBtn.style.background = '';
-                updateStatus('⏹️ Replay stopped');
+                updateStatus('⏹️ Replay stopped (tap Replay to start again)');
             }
         });
 
