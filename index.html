@@ -303,8 +303,11 @@
                     <input type="range" id="airResistance" min="0" max="1" step="0.1" value="0.5">
                 </div>
                 <div class="setting-item">
-                    <label>Impact Power Multiplier <span class="range-value" id="impactPowerValue">15</span></label>
-                    <input type="range" id="impactPower" min="1" max="30" step="1" value="15">
+                    <label>Impact Power (Spring Effect) <span class="range-value" id="impactPowerValue">1.5</span></label>
+                    <input type="range" id="impactPower" min="0.5" max="3.0" step="0.1" value="1.5">
+                    <div style="font-size: 11px; color: #aaa; margin-top: 3px;">
+                        0.5 = Soft | 1.5 = Realistic | 3.0 = Super bounce
+                    </div>
                 </div>
                 <div class="setting-item">
                     <label>Spin Effect (Hook/Slice) <span class="range-value" id="spinValue">5</span></label>
@@ -377,7 +380,7 @@
             loftAngle: 25,          // degrees (club face angle - converts downward swing to upward launch)
             gravity: 9.81,          // m/s²
             airResistance: 0.5,     // factor 0-1
-            impactPower: 15,        // multiplier for ball flight distance (1-30)
+            impactPower: 1.5,       // Coefficient of restitution (club spring effect): 0.5-3.0, realistic is 1.4-1.6
             spinEffect: 5,          // 0-10: how much spin affects trajectory (Magnus effect)
             showDebug: false,       // Hidden by default to save space
             soundEnabled: true,
@@ -1334,15 +1337,11 @@
             }
             
             // ====================================================================
-            // STEP 4: Apply SCALING FACTORS (⚠️ PROBLEM AREA!)
+            // STEP 4: Apply SCALING FACTORS (NOW FIXED!)
             // ====================================================================
-            // This is where the physics gets unrealistic!
-            // We multiply club velocity by various factors to get ball velocity
-            // 
             // REAL PHYSICS: Ball speed / club speed ≈ 1.5x (due to club elasticity)
-            // OUR CODE: Currently multiplying by 60x or more! 🚨
             // 
-            // Let's break down each factor:
+            // Breakdown of each factor:
             // ====================================================================
             
             const weightFactor = settings.clubWeight / 200;          
@@ -1350,31 +1349,27 @@
             // For standard 200g club head: factor = 1.0
             // Range: 0.5 - 2.5x for realistic club weights (100-500g)
             
-            const leverEffect = 4.0;  
-            // ⚠️ SUSPICIOUS: This represents club length leverage
-            // A 1.2m club gives ~4x velocity at tip vs grip
-            // BUT: We're already tracking tip velocity directly!
-            // This might be DOUBLE-COUNTING the leverage effect!
-            // Expected: Should be 1.0 (already in tip velocity)
+            const leverEffect = 1.0;  
+            // ✅ FIXED: Was 4.0, now 1.0
+            // We're already tracking club TIP velocity directly!
+            // The leverage effect (club length amplification) is already included
+            // in the tip position tracking via quaternion rotation
             
             const energyTransferFactor = settings.impactPower;  
-            // ⚠️ VERY SUSPICIOUS: Default = 15 (user adjustable 1-30)
-            // This is meant to be "impact power" but has no physical basis
-            // Real golf: energy transfer efficiency ≈ 0.7-0.8 (70-80%)
-            // Expected: Should be 0.7 - 1.5 (< 1 for energy loss, >1 for club spring)
+            // This represents the coefficient of restitution (springiness)
+            // Real golf: club face spring effect ≈ 1.4-1.5x
+            // User adjustable for game feel (1-3 realistic range)
+            // Default changed to 1.5 for realistic physics
             
             const totalScale = weightFactor * leverEffect * energyTransferFactor;
-            // TOTAL MULTIPLICATION = 1.0 * 4.0 * 15 = 60x by default! 🚨🚨🚨
+            // TOTAL MULTIPLICATION = 1.0 * 1.0 * 1.5 = 1.5x (realistic!)
             // 
-            // Example: If club tip moves at 5 m/s (realistic phone swing)
-            // Ball velocity becomes: 5 * 60 = 300 m/s (way too fast!)
-            // This would send ball 5000+ meters!
-            // 
-            // REALISTIC RANGE: Total scale should be 1.0 - 2.0x
-            // Recommendation: leverEffect = 1.0, energyTransferFactor = 1.5
+            // Example: If club tip moves at 40 m/s (fast amateur swing)
+            // Ball velocity becomes: 40 * 1.5 = 60 m/s (realistic pro level!)
+            // Expected distance: 220-280 meters
             // ====================================================================
             
-            addDebugMessage(`Scale: ${totalScale.toFixed(1)}x (⚠️ CHECK IF TOO HIGH!)`);
+            addDebugMessage(`Scale: ${totalScale.toFixed(1)}x ✓`);
             
             // ====================================================================
             // STEP 5: Ensure ball flies AWAY from player (positive Z)
@@ -1420,8 +1415,10 @@
             addDebugMessage(`IMPACT: ${totalVel.toFixed(1)}m/s [x:${result.x.toFixed(1)}, y:${result.y.toFixed(1)}, z:${result.z.toFixed(1)}]`);
             
             // ⚠️ SANITY CHECK: Warn if velocity seems unrealistic
-            if (totalVel > 100) {
-                addDebugMessage(`⚠️⚠️ VELOCITY TOO HIGH! ${totalVel.toFixed(0)}m/s (expect 10-75)`);
+            if (totalVel > 80) {
+                addDebugMessage(`⚠️ VELOCITY HIGH! ${totalVel.toFixed(0)}m/s (pro level is 60-75)`);
+            } else if (totalVel < 5) {
+                addDebugMessage(`⚠️ VELOCITY LOW! ${totalVel.toFixed(0)}m/s (swing harder!)`);
             }
             
             return result;
@@ -2672,7 +2669,7 @@
             document.getElementById('airResValue').textContent = parseFloat(this.value).toFixed(1);
         });
         settingsInputs.impactPower.addEventListener('input', function() {
-            document.getElementById('impactPowerValue').textContent = this.value;
+            document.getElementById('impactPowerValue').textContent = parseFloat(this.value).toFixed(1);
         });
         settingsInputs.spinEffect.addEventListener('input', function() {
             document.getElementById('spinValue').textContent = this.value;
@@ -2707,7 +2704,7 @@
             document.getElementById('timeoutValue').textContent = settings.swingTimeout;
             document.getElementById('loftValue').textContent = settings.loftAngle;
             document.getElementById('airResValue').textContent = settings.airResistance.toFixed(1);
-            document.getElementById('impactPowerValue').textContent = settings.impactPower;
+            document.getElementById('impactPowerValue').textContent = settings.impactPower.toFixed(1);
             document.getElementById('spinValue').textContent = settings.spinEffect;
             document.getElementById('volumeValue').textContent = settings.soundVolume;
             
