@@ -1,0 +1,2203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Air Golf</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            touch-action: none;
+            overflow: hidden;
+            position: fixed;
+            width: 100%;
+            height: 100vh;
+            height: 100dvh; /* Dynamic viewport height for mobile */
+        }
+        
+        #gameContainer {
+            width: 100vw;
+            height: 100vh;
+            height: 100dvh; /* Dynamic viewport height for mobile */
+            display: flex;
+            flex-direction: column;
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+        
+        #canvas {
+            flex: 1;
+            background: linear-gradient(to bottom, #87CEEB 0%, #E0F6FF 100%);
+            touch-action: none;
+            width: 100%;
+        }
+        
+        #controls {
+            padding: 10px 15px;
+            background: #333;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            flex-shrink: 0;
+        }
+        
+        button {
+            border: none;
+            border-radius: 8px;
+            color: white;
+            cursor: pointer;
+        }
+        
+        #setBallBtn {
+            padding: 18px 35px;
+            font-size: 20px;
+            font-weight: bold;
+            background: #4CAF50;
+            width: 85%;
+            max-width: 350px;
+            margin-bottom: 8px;
+        }
+        
+        #resetBtn, #settingsBtn {
+            padding: 8px 16px;
+            font-size: 13px;
+            background: #666;
+            margin: 3px;
+        }
+        
+        #settingsBtn {
+            background: #2196F3;
+        }
+        
+        button:disabled {
+            background: #444;
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+        
+        /* Settings Modal */
+        #settingsModal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+            overflow-y: auto;
+        }
+        
+        #settingsModal.active {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        #settingsPanel {
+            background: #333;
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            width: 90%;
+            max-width: 500px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        
+        #settingsPanel h2 {
+            margin-top: 0;
+            text-align: center;
+            color: #4CAF50;
+        }
+        
+        .setting-group {
+            margin: 15px 0;
+            padding: 10px;
+            background: #444;
+            border-radius: 5px;
+        }
+        
+        .setting-group h3 {
+            margin: 0 0 10px 0;
+            font-size: 16px;
+            color: #2196F3;
+        }
+        
+        .setting-item {
+            margin: 10px 0;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .setting-item label {
+            margin-bottom: 5px;
+            font-size: 14px;
+        }
+        
+        .setting-item input[type="number"],
+        .setting-item input[type="range"] {
+            padding: 8px;
+            font-size: 16px;
+            background: #555;
+            color: white;
+            border: 1px solid #666;
+            border-radius: 4px;
+        }
+        
+        .setting-item input[type="checkbox"] {
+            width: 30px;
+            height: 30px;
+        }
+        
+        .range-value {
+            display: inline-block;
+            margin-left: 10px;
+            font-weight: bold;
+            color: #4CAF50;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        
+        .button-group button {
+            flex: 1;
+            padding: 15px;
+            font-size: 16px;
+        }
+        
+        #saveSettingsBtn {
+            background: #4CAF50;
+        }
+        
+        #cancelSettingsBtn {
+            background: #666;
+        }
+        
+        #status {
+            margin: 5px 0;
+            font-size: 16px;
+            font-weight: bold;
+            line-height: 1.3;
+            width: 100%;
+            text-align: center;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            padding: 3px 8px;
+            box-sizing: border-box;
+        }
+        
+        #debug {
+            font-size: 11px;
+            font-family: monospace;
+            background: #222;
+            padding: 5px;
+            margin-top: 5px;
+            max-height: 80px;
+            overflow-y: auto;
+            line-height: 1.2;
+            width: 100%;
+            box-sizing: border-box;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="canvas"></canvas>
+        <div id="controls">
+            <button id="setBallBtn">⛳ Tee Up</button>
+            <div style="display: flex; gap: 10px; justify-content: center;">
+                <button id="settingsBtn">Settings</button>
+                <button id="resetBtn" disabled>Reset</button>
+            </div>
+            <div id="status">🏌️ Welcome! Hold your phone like a golf club, then tap "Tee Up"</div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal">
+        <div id="settingsPanel">
+            <h2>⚙️ Settings</h2>
+            
+            <div class="setting-group">
+                <h3>🏌️ Golf Club</h3>
+                <div class="setting-item">
+                    <label>Club Length (meters)</label>
+                    <input type="number" id="clubLength" min="0.5" max="2.0" step="0.1" value="1.2">
+                </div>
+                <div class="setting-item">
+                    <label>Club Head Weight (grams)</label>
+                    <input type="number" id="clubWeight" min="100" max="500" step="10" value="200">
+                </div>
+                <div class="setting-item">
+                    <label>Loft Angle (degrees) <span class="range-value" id="loftValue">25</span></label>
+                    <input type="range" id="loftAngle" min="10" max="60" step="1" value="25">
+                    <div style="font-size: 11px; color: #aaa; margin-top: 3px;">Driver:10° | 5-iron:25° | 9-iron:42°</div>
+                </div>
+            </div>
+            
+            <div class="setting-group">
+                <h3>📱 Phone Grip</h3>
+                <div class="setting-item">
+                    <label>Swing Style</label>
+                    <select id="phoneOrientation">
+                        <option value="edge">🏌️ Edge First (Like Real Club)</option>
+                        <option value="screen">📱 Screen First (Flat Swing)</option>
+                    </select>
+                    <div style="font-size: 11px; color: #aaa; margin-top: 3px;">
+                        Edge First: Hold phone like a golf club shaft<br>
+                        Screen First: Swing with screen facing forward
+                    </div>
+                </div>
+            </div>
+            
+            <div class="setting-group">
+                <h3>⚪ Golf Ball</h3>
+                <div class="setting-item">
+                    <label>Ball Diameter (cm)</label>
+                    <input type="number" id="ballDiameter" min="3" max="10" step="0.5" value="4.3">
+                </div>
+                <div class="setting-item">
+                    <label>Ball Weight (grams)</label>
+                    <input type="number" id="ballWeight" min="30" max="100" step="1" value="45.9">
+                </div>
+                <div class="setting-item">
+                    <label>Hit Zone Diameter (cm)</label>
+                    <input type="number" id="hitZoneDiameter" min="5" max="100" step="1" value="30">
+                </div>
+            </div>
+            
+            <div class="setting-group">
+                <h3>🎯 Hit Detection</h3>
+                <div class="setting-item">
+                    <label>Position Sensitivity (degrees) <span class="range-value" id="sensitivityValue">15</span></label>
+                    <input type="range" id="hitSensitivity" min="5" max="30" step="1" value="15">
+                </div>
+                <div class="setting-item">
+                    <label>Minimum Swing Speed (m/s²) <span class="range-value" id="speedValue">5.0</span></label>
+                    <input type="range" id="minSwingSpeed" min="1" max="15" step="0.5" value="5">
+                </div>
+                <div class="setting-item">
+                    <label>Swing Timeout (seconds) <span class="range-value" id="timeoutValue">10</span></label>
+                    <input type="range" id="swingTimeout" min="5" max="30" step="1" value="10">
+                </div>
+            </div>
+            
+            <div class="setting-group">
+                <h3>🌍 Physics</h3>
+                <div class="setting-item">
+                    <label>Gravity (m/s²)</label>
+                    <input type="number" id="gravity" min="5" max="15" step="0.1" value="9.81">
+                </div>
+                <div class="setting-item">
+                    <label>Air Resistance Factor <span class="range-value" id="airResValue">0.5</span></label>
+                    <input type="range" id="airResistance" min="0" max="1" step="0.1" value="0.5">
+                </div>
+                <div class="setting-item">
+                    <label>Impact Power Multiplier <span class="range-value" id="impactPowerValue">15</span></label>
+                    <input type="range" id="impactPower" min="1" max="30" step="1" value="15">
+                </div>
+            </div>
+            
+            <div class="setting-group">
+                <h3>🖥️ Display</h3>
+                <div class="setting-item">
+                    <label style="display: flex; align-items: center; gap: 10px;">
+                        <input type="checkbox" id="showDebug">
+                        Show Debug Info
+                    </label>
+                </div>
+            </div>
+            
+            <div class="setting-group">
+                <h3>🔊 Sound</h3>
+                <div class="setting-item">
+                    <label style="display: flex; align-items: center; gap: 10px;">
+                        <input type="checkbox" id="soundEnabled" checked>
+                        Enable Sound Effects
+                    </label>
+                </div>
+                <div class="setting-item">
+                    <label>Volume <span class="range-value" id="volumeValue">50</span>%</label>
+                    <input type="range" id="soundVolume" min="0" max="100" step="5" value="50">
+                </div>
+            </div>
+            
+            <div class="button-group">
+                <button id="saveSettingsBtn">Save</button>
+                <button id="cancelSettingsBtn">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ============================================
+        // GLOBAL STATE MANAGEMENT
+        // ============================================
+        const GameState = {
+            WAITING_PERMISSION: 'waiting_permission',
+            READY_TO_SET_BALL: 'ready_to_set_ball',
+            BALL_SET_READY_TO_SWING: 'ball_set_ready_to_swing',
+            SWINGING: 'swinging',
+            BALL_FLYING: 'ball_flying',
+            SHOWING_RESULTS: 'showing_results'
+        };
+
+        let currentState = GameState.READY_TO_SET_BALL;
+        let imuPermissionGranted = false;
+
+        // ============================================
+        // SETTINGS CONFIGURATION
+        // ============================================
+        let settings = {
+            phoneOrientation: 'edge',   // 'screen' or 'edge' - which side is the club face
+            clubLength: 1.2,        // meters
+            clubWeight: 200,        // grams
+            ballDiameter: 4.3,      // cm (regulation golf ball)
+            ballWeight: 45.9,       // grams
+            hitZoneDiameter: 30,    // cm (detection zone diameter)
+            hitSensitivity: 15,     // degrees (deprecated - using distance now)
+            minSwingSpeed: 5.0,     // m/s²
+            loftAngle: 25,          // degrees (club face angle - converts downward swing to upward launch)
+            gravity: 9.81,          // m/s²
+            airResistance: 0.5,     // factor 0-1
+            impactPower: 15,        // multiplier for ball flight distance (1-30)
+            showDebug: false,       // Hidden by default to save space
+            soundEnabled: true,
+            soundVolume: 50,        // 0-100
+            swingTimeout: 10        // seconds until forced reset
+        };
+
+        // ============================================
+        // LAST SHOT DATA (for localStorage)
+        // ============================================
+        let lastShot = {
+            distance: 0,
+            maxHeight: 0,
+            impactSpeed: 0,
+            timestamp: null
+        };
+
+        // ============================================
+        // SWING TIMEOUT TRACKING
+        // ============================================
+        let swingTimer = {
+            startTime: 0,
+            timeRemaining: 0,
+            expired: false
+        };
+
+        // ============================================
+        // CLUB TIP TRACKING
+        // ============================================
+        // PURPOSE: Track the position of the club tip through 3D space
+        let clubTipTracking = {
+            // Quaternion for orientation (Madgwick filter output)
+            quaternion: { w: 1, x: 0, y: 0, z: 0 },
+            
+            // Club tip position in 3D space (meters from grip)
+            tipPosition: { x: 0, y: 0, z: 0 },
+            
+            // Offset to subtract (set when ball is positioned)
+            offset: { x: 0, y: 0, z: 0 },
+            
+            // Club tip velocity (m/s)
+            tipVelocity: { x: 0, y: 0, z: 0 },
+            
+            // Tracking history for visualization
+            history: [],
+            
+            // Madgwick filter parameters
+            beta: 0.1,  // Filter gain (higher = more responsive, more noise)
+            
+            // Last update timestamp
+            lastUpdateTime: 0
+        };
+
+        // ============================================
+        // PERSPECTIVE PROJECTION (2.5D VIEW)
+        // ============================================
+        // COORDINATE SYSTEM:
+        // X-axis: Left (-) to Right (+)
+        // Y-axis: Down (-) to Up (+)  
+        // Z-axis: Camera (-) to Fairway (+) - ball flies in +Z direction
+        //
+        // Camera looking down the fairway (along Z-axis)
+        const camera = {
+            distance: 4.0,  // meters behind tee (farther for better view)
+            height: 2.0,    // meters above ground (higher for better angle)
+            fov: 60         // field of view in degrees
+        };
+        
+        const groundLinePercent = 0.70; // Ground at 70% down screen
+        
+        // Project 3D world coordinates to 2D screen coordinates
+        function project3DToScreen(worldX, worldY, worldZ) {
+            // Camera is behind the ball, looking forward (+Z direction)
+            // worldZ increases as ball flies away
+            
+            const cameraZ = -camera.distance; // Camera is behind (0,0,0)
+            const cameraY = camera.height;
+            
+            // Relative to camera
+            const relX = worldX;
+            const relY = worldY - cameraY;
+            const relZ = worldZ - cameraZ;
+            
+            // Prevent division by zero or negative Z (behind camera)
+            if (relZ <= 0.1) {
+                return { x: canvas.width / 2, y: canvas.height, scale: 0, visible: false };
+            }
+            
+            // Simple perspective projection
+            const perspective = 250 / relZ; // Reduced from 300 for less aggressive scaling
+            
+            const screenX = canvas.width / 2 + relX * perspective;
+            
+            // Ground is at groundLinePercent down the screen
+            const groundLine = canvas.height * groundLinePercent;
+            const screenY = groundLine - relY * perspective;
+            
+            // Check if visible on screen
+            const visible = screenX >= -50 && screenX <= canvas.width + 50 &&
+                          screenY >= -50 && screenY <= canvas.height + 50;
+            
+            return { x: screenX, y: screenY, scale: perspective, visible: visible };
+        }
+
+        // ============================================
+        // DEBUG LOG SYSTEM
+        // ============================================
+        let debugLog = {
+            messages: [],
+            maxMessages: 50  // Keep more messages
+        };
+        
+        function addDebugMessage(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            debugLog.messages.push(`[${timestamp.split(':')[2]}] ${message}`); // Show only seconds
+            
+            // Keep only last N messages
+            if (debugLog.messages.length > debugLog.maxMessages) {
+                debugLog.messages.shift();
+            }
+        }
+
+        // ============================================
+        // IMU DATA STORAGE
+        // ============================================
+        // PURPOSE: Store raw sensor data from device motion events
+        let imuData = {
+            acceleration: { x: 0, y: 0, z: 0 },      // Linear acceleration (m/s²)
+            rotationRate: { alpha: 0, beta: 0, gamma: 0 },  // Angular velocity (deg/s)
+            orientation: { alpha: 0, beta: 0, gamma: 0 },    // Device orientation (deg)
+            timestamp: 0
+        };
+
+        // ============================================
+        // BALL POSITION & SWING DATA
+        // ============================================
+        // PURPOSE: Store the position where user marked the ball and track swing motion
+        let ballPosition = {
+            orientation: { alpha: 0, beta: 0, gamma: 0 },  // Orientation when ball was set
+            timestamp: 0,
+            set: false
+        };
+
+        let swingData = {
+            recordedMotion: [],      // Array of IMU readings during swing
+            startTime: 0,
+            hitDetected: false,
+            hitTime: 0,
+            impactVelocity: { x: 0, y: 0, z: 0 }  // Velocity at impact
+        };
+
+        // ============================================
+        // BALL FLIGHT PHYSICS
+        // ============================================
+        // PURPOSE: Simulate ball trajectory after hit
+        let ballFlight = {
+            position: { x: 0, y: 0, z: 0 },     // 3D position in world space
+            velocity: { x: 0, y: 0, z: 0 },     // Current velocity
+            flying: false,
+            startTime: 0,
+            lastUpdateTime: 0,  // For per-frame delta time
+            landingDistance: 0,
+            maxHeight: 0,
+            trajectory: []  // Store path for visualization
+        };
+
+        // ============================================
+        // UI ELEMENTS
+        // ============================================
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const setBallBtn = document.getElementById('setBallBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const settingsBtn = document.getElementById('settingsBtn');
+        const statusDiv = document.getElementById('status');
+        
+        // Settings Modal Elements
+        const settingsModal = document.getElementById('settingsModal');
+        const saveSettingsBtn = document.getElementById('saveSettingsBtn');
+        const cancelSettingsBtn = document.getElementById('cancelSettingsBtn');
+        const settingsInputs = {
+            phoneOrientation: document.getElementById('phoneOrientation'),
+            clubLength: document.getElementById('clubLength'),
+            clubWeight: document.getElementById('clubWeight'),
+            loftAngle: document.getElementById('loftAngle'),
+            ballDiameter: document.getElementById('ballDiameter'),
+            ballWeight: document.getElementById('ballWeight'),
+            hitZoneDiameter: document.getElementById('hitZoneDiameter'),
+            hitSensitivity: document.getElementById('hitSensitivity'),
+            minSwingSpeed: document.getElementById('minSwingSpeed'),
+            swingTimeout: document.getElementById('swingTimeout'),
+            gravity: document.getElementById('gravity'),
+            airResistance: document.getElementById('airResistance'),
+            impactPower: document.getElementById('impactPower'),
+            showDebug: document.getElementById('showDebug'),
+            soundEnabled: document.getElementById('soundEnabled'),
+            soundVolume: document.getElementById('soundVolume')
+        };
+
+        // Set canvas size
+        function resizeCanvas() {
+            canvas.width = canvas.clientWidth;
+            canvas.height = canvas.clientHeight;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+        
+        // Start rendering loop immediately
+        requestAnimationFrame(render);
+
+        // ============================================
+        // SOUND SYSTEM
+        // ============================================
+        // PURPOSE: Generate sound effects using Web Audio API
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        
+        function playHitSound() {
+            if (!settings.soundEnabled) return;
+            
+            const now = audioContext.currentTime;
+            const volume = settings.soundVolume / 100;
+            
+            // Create a sharp "crack" sound for club hitting ball
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            // Sharp percussive sound
+            oscillator.frequency.setValueAtTime(800, now);
+            oscillator.frequency.exponentialRampToValueAtTime(100, now + 0.1);
+            oscillator.type = 'triangle';
+            
+            gainNode.gain.setValueAtTime(volume * 0.5, now);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+            
+            oscillator.start(now);
+            oscillator.stop(now + 0.15);
+        }
+        
+        function playLandSound() {
+            if (!settings.soundEnabled) return;
+            
+            const now = audioContext.currentTime;
+            const volume = settings.soundVolume / 100;
+            
+            // Create a "thud" sound for ball landing
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            // Low thud sound
+            oscillator.frequency.setValueAtTime(150, now);
+            oscillator.frequency.exponentialRampToValueAtTime(50, now + 0.2);
+            oscillator.type = 'sine';
+            
+            gainNode.gain.setValueAtTime(volume * 0.4, now);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+            
+            oscillator.start(now);
+            oscillator.stop(now + 0.25);
+        }
+        
+        function playAlarmSound() {
+            if (!settings.soundEnabled) return;
+            
+            const now = audioContext.currentTime;
+            const volume = settings.soundVolume / 100;
+            
+            // Create an urgent beeping alarm sound
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            // Alternating beep pattern
+            oscillator.frequency.setValueAtTime(880, now);
+            oscillator.frequency.setValueAtTime(660, now + 0.15);
+            oscillator.frequency.setValueAtTime(880, now + 0.3);
+            oscillator.type = 'square';
+            
+            gainNode.gain.setValueAtTime(volume * 0.3, now);
+            gainNode.gain.setValueAtTime(0.01, now + 0.1);
+            gainNode.gain.setValueAtTime(volume * 0.3, now + 0.15);
+            gainNode.gain.setValueAtTime(0.01, now + 0.25);
+            gainNode.gain.setValueAtTime(volume * 0.3, now + 0.3);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.45);
+            
+            oscillator.start(now);
+            oscillator.stop(now + 0.45);
+        }
+
+        // ============================================
+        // LOCAL STORAGE FUNCTIONS
+        // ============================================
+        // PURPOSE: Save and load settings and last shot data
+        
+        function saveToLocalStorage() {
+            try {
+                localStorage.setItem('airGolfSettings', JSON.stringify(settings));
+                localStorage.setItem('airGolfLastShot', JSON.stringify(lastShot));
+            } catch (e) {
+                console.error('Failed to save to localStorage:', e);
+            }
+        }
+        
+        function loadFromLocalStorage() {
+            try {
+                const savedSettings = localStorage.getItem('airGolfSettings');
+                const savedLastShot = localStorage.getItem('airGolfLastShot');
+                
+                if (savedSettings) {
+                    const loaded = JSON.parse(savedSettings);
+                    // Merge with defaults to handle new settings
+                    settings = { ...settings, ...loaded };
+                }
+                
+                if (savedLastShot) {
+                    lastShot = JSON.parse(savedLastShot);
+                }
+            } catch (e) {
+                console.error('Failed to load from localStorage:', e);
+            }
+        }
+        
+        // Load settings on startup
+        loadFromLocalStorage();
+
+        // ============================================
+        // MADGWICK FILTER - SENSOR FUSION
+        // ============================================
+        // PURPOSE: Combine accelerometer and gyroscope data for accurate orientation
+        
+        function madgwickFilterUpdate(gx, gy, gz, ax, ay, az, dt) {
+            // Convert gyroscope degrees/sec to radians/sec
+            gx = gx * Math.PI / 180;
+            gy = gy * Math.PI / 180;
+            gz = gz * Math.PI / 180;
+            
+            // Short name for quaternion
+            let q = clubTipTracking.quaternion;
+            
+            // Normalize accelerometer measurement
+            const norm = Math.sqrt(ax * ax + ay * ay + az * az);
+            if (norm === 0) return; // Avoid division by zero
+            
+            ax /= norm;
+            ay /= norm;
+            az /= norm;
+            
+            // Gradient descent algorithm corrective step
+            const _2q0 = 2 * q.w;
+            const _2q1 = 2 * q.x;
+            const _2q2 = 2 * q.y;
+            const _2q3 = 2 * q.z;
+            const _4q0 = 4 * q.w;
+            const _4q1 = 4 * q.x;
+            const _4q2 = 4 * q.y;
+            const _8q1 = 8 * q.x;
+            const _8q2 = 8 * q.y;
+            const q0q0 = q.w * q.w;
+            const q1q1 = q.x * q.x;
+            const q2q2 = q.y * q.y;
+            const q3q3 = q.z * q.z;
+            
+            // Gradient (matrix calculations)
+            const s0 = _4q0 * q2q2 + _2q2 * ax + _4q0 * q1q1 - _2q1 * ay;
+            const s1 = _4q1 * q3q3 - _2q3 * ax + 4 * q0q0 * q.x - _2q0 * ay - _4q1 + _8q1 * q1q1 + _8q1 * q2q2 + _4q1 * az;
+            const s2 = 4 * q0q0 * q.y + _2q0 * ax + _4q2 * q3q3 - _2q3 * ay - _4q2 + _8q2 * q1q1 + _8q2 * q2q2 + _4q2 * az;
+            const s3 = 4 * q1q1 * q.z - _2q1 * ax + 4 * q2q2 * q.z - _2q2 * ay;
+            
+            const sNorm = Math.sqrt(s0 * s0 + s1 * s1 + s2 * s2 + s3 * s3);
+            
+            // Apply feedback step
+            const qDot1 = 0.5 * (-q.x * gx - q.y * gy - q.z * gz) - clubTipTracking.beta * (s0 / sNorm);
+            const qDot2 = 0.5 * (q.w * gx + q.y * gz - q.z * gy) - clubTipTracking.beta * (s1 / sNorm);
+            const qDot3 = 0.5 * (q.w * gy - q.x * gz + q.z * gx) - clubTipTracking.beta * (s2 / sNorm);
+            const qDot4 = 0.5 * (q.w * gz + q.x * gy - q.y * gx) - clubTipTracking.beta * (s3 / sNorm);
+            
+            // Integrate quaternion rate
+            q.w += qDot1 * dt;
+            q.x += qDot2 * dt;
+            q.y += qDot3 * dt;
+            q.z += qDot4 * dt;
+            
+            // Normalize quaternion
+            const qNorm = Math.sqrt(q.w * q.w + q.x * q.x + q.y * q.y + q.z * q.z);
+            q.w /= qNorm;
+            q.x /= qNorm;
+            q.y /= qNorm;
+            q.z /= qNorm;
+        }
+        
+        // ============================================
+        // CLUB TIP POSITION CALCULATION
+        // ============================================
+        // PURPOSE: Calculate 3D position of club tip based on orientation and club length
+        
+        function calculateClubTipPosition() {
+            const q = clubTipTracking.quaternion;
+            const clubLength = settings.clubLength;
+            
+            // Club points downward from grip in local coordinates
+            // Local club direction: (0, -clubLength, 0) in grip's reference frame
+            const localX = 0;
+            const localY = -clubLength;
+            const localZ = 0;
+            
+            // Rotate local club vector by quaternion to get world position
+            // q * v * q_conjugate
+            const ix = q.w * localX + q.y * localZ - q.z * localY;
+            const iy = q.w * localY + q.z * localX - q.x * localZ;
+            const iz = q.w * localZ + q.x * localY - q.y * localX;
+            const iw = -q.x * localX - q.y * localY - q.z * localZ;
+            
+            let tipX = ix * q.w + iw * -q.x + iy * -q.z - iz * -q.y;
+            let tipY = iy * q.w + iw * -q.y + iz * -q.x - ix * -q.z;
+            let tipZ = iz * q.w + iw * -q.z + ix * -q.y - iy * -q.x;
+            
+            // Apply phone orientation transformation
+            if (settings.phoneOrientation === 'edge') {
+                // Edge-first: Same rotation as velocity
+                // Phone X → Screen Z, Phone Y → Screen X, Phone Z → Screen Y
+                const tempX = tipX;
+                const tempY = tipY;
+                const tempZ = tipZ;
+                
+                tipX = tempY;   // Phone Y → Screen X
+                tipY = -tempZ;  // Phone Z → Screen Y (inverted)
+                tipZ = tempX;   // Phone X → Screen Z
+            }
+            // For 'screen' orientation, no transformation needed (original behavior)
+            
+            // Offset so tip starts at (0,0,0) instead of (0, -clubLength, 0)
+            // Add clubLength to Y so initial position is at origin
+            // Then subtract the offset that was stored when ball was set
+            clubTipTracking.tipPosition.x = tipX - clubTipTracking.offset.x;
+            clubTipTracking.tipPosition.y = (tipY + clubLength) - clubTipTracking.offset.y;
+            clubTipTracking.tipPosition.z = tipZ - clubTipTracking.offset.z;
+        }
+        
+        // ============================================
+        // CLUB TIP TRACKING UPDATE
+        // ============================================
+        // PURPOSE: Update club tip tracking with new IMU data
+        
+        function updateClubTipTracking() {
+            const now = Date.now();
+            
+            // Calculate time delta
+            if (clubTipTracking.lastUpdateTime === 0) {
+                clubTipTracking.lastUpdateTime = now;
+                return;
+            }
+            
+            const dt = (now - clubTipTracking.lastUpdateTime) / 1000; // Convert to seconds
+            clubTipTracking.lastUpdateTime = now;
+            
+            // Skip if dt is too large (first frame or tab was inactive)
+            if (dt > 0.1) return;
+            
+            // Update orientation using Madgwick filter
+            madgwickFilterUpdate(
+                imuData.rotationRate.alpha || 0,
+                imuData.rotationRate.beta || 0,
+                imuData.rotationRate.gamma || 0,
+                imuData.acceleration.x || 0,
+                imuData.acceleration.y || 0,
+                imuData.acceleration.z || 0,
+                dt
+            );
+            
+            // Calculate club tip position from orientation
+            calculateClubTipPosition();
+            
+            // Store in history for visualization
+            clubTipTracking.history.push({
+                position: { ...clubTipTracking.tipPosition },
+                timestamp: now
+            });
+            
+            // Keep only last 2 seconds of history
+            const twoSecondsAgo = now - 2000;
+            clubTipTracking.history = clubTipTracking.history.filter(
+                h => h.timestamp > twoSecondsAgo
+            );
+            
+            // Debug: Show tip position every 30 frames when ball is set (about every 0.5 sec)
+            if (ballPosition.set && clubTipTracking.history.length % 30 === 0) {
+                const tipDist = Math.sqrt(
+                    clubTipTracking.tipPosition.x ** 2 +
+                    clubTipTracking.tipPosition.y ** 2 +
+                    clubTipTracking.tipPosition.z ** 2
+                );
+                addDebugMessage(`Tip: [${clubTipTracking.tipPosition.x.toFixed(2)}, ${clubTipTracking.tipPosition.y.toFixed(2)}, ${clubTipTracking.tipPosition.z.toFixed(2)}] d:${tipDist.toFixed(2)}m`);
+            }
+        }
+
+        // ============================================
+        // PART 1: IMU PERMISSION & DATA COLLECTION
+        // ============================================
+        // PURPOSE: Request permission for device motion sensors (iOS 13+)
+        // and start collecting IMU data
+
+        async function requestIMUPermission() {
+            updateStatus('Requesting IMU permission...');
+            
+            // TODO: Implement iOS permission request
+            // Check if DeviceMotionEvent.requestPermission exists (iOS 13+)
+            if (typeof DeviceMotionEvent.requestPermission === 'function') {
+                try {
+                    const permission = await DeviceMotionEvent.requestPermission();
+                    if (permission === 'granted') {
+                        initializeIMU();
+                        return true;
+                    } else {
+                        updateStatus('ERROR: IMU permission denied');
+                        return false;
+                    }
+                } catch (error) {
+                    updateStatus('ERROR: ' + error.message);
+                    return false;
+                }
+            } else {
+                // Non-iOS devices or older iOS
+                initializeIMU();
+                return true;
+            }
+        }
+
+        function initializeIMU() {
+            // TODO: Start listening to device motion events
+            window.addEventListener('devicemotion', handleDeviceMotion);
+            window.addEventListener('deviceorientation', handleDeviceOrientation);
+            
+            imuPermissionGranted = true;
+            currentState = GameState.READY_TO_SET_BALL;
+            
+            resetBtn.disabled = false;
+            
+            updateStatus('✓ IMU Ready! Set ball position to start');
+        }
+
+        // ============================================
+        // PART 2: IMU DATA HANDLERS
+        // ============================================
+        // PURPOSE: Collect and store raw IMU data from device sensors
+        function handleDeviceMotion(event) {
+            // TODO: Process device motion data
+            // Store acceleration and rotation rate
+            if (event.acceleration) {
+                imuData.acceleration = {
+                    x: event.acceleration.x || 0,
+                    y: event.acceleration.y || 0,
+                    z: event.acceleration.z || 0
+                };
+            }
+            
+            if (event.rotationRate) {
+                imuData.rotationRate = {
+                    alpha: event.rotationRate.alpha || 0,
+                    beta: event.rotationRate.beta || 0,
+                    gamma: event.rotationRate.gamma || 0
+                };
+            }
+            
+            imuData.timestamp = event.timeStamp || Date.now();
+            
+            // Update club tip tracking if ball is set or swinging
+            if (currentState === GameState.BALL_SET_READY_TO_SWING || 
+                currentState === GameState.SWINGING) {
+                updateClubTipTracking();
+            }
+            
+            // If we're in swinging state, record the motion
+            if (currentState === GameState.SWINGING) {
+                recordSwingMotion();
+            }
+        }
+
+        function handleDeviceOrientation(event) {
+            // TODO: Store device orientation
+            imuData.orientation = {
+                alpha: event.alpha || 0,  // Rotation around z-axis (0-360)
+                beta: event.beta || 0,    // Rotation around x-axis (-180 to 180)
+                gamma: event.gamma || 0   // Rotation around y-axis (-90 to 90)
+            };
+        }
+
+        // ============================================
+        // PART 3: BALL POSITION SETTING
+        // ============================================
+        // PURPOSE: Mark the current phone position as the ball's location
+        setBallBtn.addEventListener('click', async function() {
+            // First check if we need to request IMU permission
+            if (!imuPermissionGranted) {
+                const granted = await requestIMUPermission();
+                if (!granted) return; // Permission denied, exit
+            }
+            
+            // Now set the ball position
+            setBallPosition();
+        });
+
+        function setBallPosition() {
+            // TODO: Record current orientation as ball position
+            // This is the reference point for detecting when club returns to hit ball
+            ballPosition = {
+                orientation: { ...imuData.orientation },
+                timestamp: Date.now(),
+                set: true
+            };
+            
+            // Calculate current tip position BEFORE resetting
+            calculateClubTipPosition();
+            
+            // Store current position as offset (so future positions are relative to this)
+            clubTipTracking.offset = {
+                x: clubTipTracking.tipPosition.x + clubTipTracking.offset.x,
+                y: clubTipTracking.tipPosition.y + clubTipTracking.offset.y,
+                z: clubTipTracking.tipPosition.z + clubTipTracking.offset.z
+            };
+            
+            // Now recalculate - tip should be at (0,0,0)
+            calculateClubTipPosition();
+            
+            // Clear history
+            clubTipTracking.history = [];
+            clubTipTracking.lastUpdateTime = Date.now();
+            
+            // Start swing timeout timer
+            swingTimer.startTime = Date.now();
+            swingTimer.timeRemaining = settings.swingTimeout;
+            swingTimer.expired = false;
+            
+            currentState = GameState.BALL_SET_READY_TO_SWING;
+            setBallBtn.disabled = true;
+            updateStatus('✓ Ball Set! Swing now!');
+            
+            // Debug
+            addDebugMessage(`⚪ Ball set! Tip at [${clubTipTracking.tipPosition.x.toFixed(3)}, ${clubTipTracking.tipPosition.y.toFixed(3)}, ${clubTipTracking.tipPosition.z.toFixed(3)}]`);
+            addDebugMessage(`📱 Grip: ${settings.phoneOrientation === 'edge' ? 'Edge First 🏌️' : 'Screen First 📱'}`);
+            addDebugMessage(`Offset: [${clubTipTracking.offset.x.toFixed(3)}, ${clubTipTracking.offset.y.toFixed(3)}, ${clubTipTracking.offset.z.toFixed(3)}]`);
+            
+            // TODO: Start monitoring for swing motion
+            startSwingDetection();
+        }
+
+        // ============================================
+        // PART 4: SWING DETECTION
+        // ============================================
+        // PURPOSE: Detect when user starts swinging and when club hits ball
+        function startSwingDetection() {
+            // TODO: Monitor for significant movement indicating swing started
+            swingData.recordedMotion = [];
+            swingData.startTime = Date.now();
+            swingData.hitDetected = false;
+            
+            currentState = GameState.SWINGING;
+        }
+
+        function recordSwingMotion() {
+            // TODO: Store IMU data during swing
+            swingData.recordedMotion.push({
+                acceleration: { ...imuData.acceleration },
+                rotationRate: { ...imuData.rotationRate },
+                orientation: { ...imuData.orientation },
+                timestamp: imuData.timestamp
+            });
+            
+            // Keep only last 2 seconds of data to avoid memory issues
+            const twoSecondsAgo = Date.now() - 2000;
+            swingData.recordedMotion = swingData.recordedMotion.filter(
+                d => d.timestamp > twoSecondsAgo
+            );
+            
+            // Check for timeout
+            checkSwingTimeout();
+            
+            // TODO: Check if club has returned to ball position (hit detected)
+            if (!swingTimer.expired) {
+                detectBallHit();
+            }
+        }
+        
+        function checkSwingTimeout() {
+            if (swingTimer.expired) return;
+            
+            const elapsed = (Date.now() - swingTimer.startTime) / 1000; // Convert to seconds
+            swingTimer.timeRemaining = Math.max(0, settings.swingTimeout - elapsed);
+            
+            if (swingTimer.timeRemaining <= 0) {
+                swingTimer.expired = true;
+                handleSwingTimeout();
+            }
+        }
+        
+        function handleSwingTimeout() {
+            // Play alarm sound
+            playAlarmSound();
+            
+            // Force reset
+            currentState = GameState.READY_TO_SET_BALL;
+            ballPosition.set = false;
+            swingData.recordedMotion = [];
+            swingData.hitDetected = false;
+            setBallBtn.disabled = false;
+            
+            updateStatus('⏰ TIMEOUT! Set ball position again');
+        }
+
+        function detectBallHit() {
+            // PURPOSE: Detect when club tip returns to ball position with sufficient velocity
+            // Uses kinematic constraints and ZUPT (Zero-Velocity Update) principles
+            
+            if (swingData.hitDetected) return;
+            
+            // Calculate distance of club tip from ball (which is at origin 0,0,0)
+            const tipDistance = Math.sqrt(
+                clubTipTracking.tipPosition.x ** 2 +
+                clubTipTracking.tipPosition.y ** 2 +
+                clubTipTracking.tipPosition.z ** 2
+            );
+            
+            // Hit threshold from settings (convert cm to meters)
+            const hitThreshold = settings.hitZoneDiameter / 200; // Diameter to radius, cm to m
+            
+            // Calculate club tip velocity magnitude
+            const totalAcceleration = Math.sqrt(
+                imuData.acceleration.x ** 2 +
+                imuData.acceleration.y ** 2 +
+                imuData.acceleration.z ** 2
+            );
+            
+            // Debug: log when close to hit zone
+            if (tipDistance < hitThreshold * 1.5) {
+                addDebugMessage(`Near! dist:${tipDistance.toFixed(3)}m thresh:${hitThreshold.toFixed(3)}m accel:${totalAcceleration.toFixed(1)}`);
+            }
+            
+            // Detect hit: club tip is near ball AND moving fast
+            if (tipDistance < hitThreshold && totalAcceleration > settings.minSwingSpeed) {
+                // Additional check: ensure club has moved away first (backswing)
+                // Check history to see if club was far away recently
+                const recentHistory = clubTipTracking.history.slice(-20); // Last 20 samples
+                const maxDistance = Math.max(...recentHistory.map(h => 
+                    Math.sqrt(h.position.x ** 2 + h.position.y ** 2 + h.position.z ** 2)
+                ));
+                
+                addDebugMessage(`HIT CHECK: dist:${tipDistance.toFixed(3)} backswing:${maxDistance.toFixed(3)}`);
+                
+                // Only register hit if club moved away at least 15cm before returning
+                if (maxDistance > 0.15) {
+                    registerBallHit();
+                } else {
+                    addDebugMessage(`REJECTED: backswing too small (need >0.15m)`);
+                }
+            }
+        }
+
+        function registerBallHit() {
+            // TODO: Calculate impact velocity from swing data
+            swingData.hitDetected = true;
+            swingData.hitTime = Date.now();
+            
+            addDebugMessage(`💥 HIT REGISTERED!`);
+            
+            // PLACEHOLDER: Calculate velocity at impact
+            swingData.impactVelocity = calculateImpactVelocity();
+            
+            // Store impact speed for results
+            lastShot.impactSpeed = Math.sqrt(
+                swingData.impactVelocity.x ** 2 +
+                swingData.impactVelocity.y ** 2 +
+                swingData.impactVelocity.z ** 2
+            );
+            
+            // Play hit sound
+            playHitSound();
+            
+            currentState = GameState.BALL_FLYING;
+            updateStatus('🏌️ HIT! Ball is flying...');
+            
+            // TODO: Start ball flight simulation
+            launchBall(swingData.impactVelocity);
+        }
+
+        function calculateImpactVelocity() {
+            // Calculate club tip velocity from position history
+            // Use finite difference: v = (position[t] - position[t-dt]) / dt
+            
+            const history = clubTipTracking.history;
+            if (history.length < 5) {
+                // Fallback to acceleration-based estimate
+                const fallback = {
+                    x: imuData.acceleration.x * 5,
+                    y: imuData.acceleration.y * 5,
+                    z: imuData.acceleration.z * 5
+                };
+                addDebugMessage(`VEL: Using fallback (hist short)`);
+                return fallback;
+            }
+            
+            // Get last few samples (smoother estimate)
+            const current = history[history.length - 1];
+            const previous = history[history.length - 5];
+            
+            const dt = (current.timestamp - previous.timestamp) / 1000; // Convert to seconds
+            
+            if (dt === 0) {
+                addDebugMessage(`VEL: dt=0!`);
+                return { x: 0, y: 0, z: 0 };
+            }
+            
+            // Log position delta to understand movement direction
+            const deltaX = current.position.x - previous.position.x;
+            const deltaY = current.position.y - previous.position.y;
+            const deltaZ = current.position.z - previous.position.z;
+            
+            addDebugMessage(`ΔPos: [${deltaX.toFixed(3)}, ${deltaY.toFixed(3)}, ${deltaZ.toFixed(3)}] in ${dt.toFixed(3)}s`);
+            addDebugMessage(`📍 Z delta: ${deltaZ.toFixed(3)} (+ = moved away, - = moved toward)`);
+            
+            // Calculate velocity using finite difference
+            let vx = deltaX / dt;
+            let vy = deltaY / dt;
+            let vz = deltaZ / dt;
+            
+            addDebugMessage(`Raw phone vel: x:${vx.toFixed(2)} y:${vy.toFixed(2)} z:${vz.toFixed(2)}`);
+            
+            // APPLY PHONE ORIENTATION ROTATION FIRST!
+            // This converts phone coordinates to screen/world coordinates BEFORE loft
+            if (settings.phoneOrientation === 'edge') {
+                // Edge-first: When holding phone like golf club (edge pointing forward)
+                // Phone X-axis (along long edge) = swing direction → Screen Z (forward)
+                // Phone Y-axis (screen normal) = left/right → Screen X
+                // Phone Z-axis (top to bottom) = up/down → Screen Y
+                const tempX = vx;
+                const tempY = vy;
+                const tempZ = vz;
+                
+                vx = tempY;   // Phone Y (screen normal) → Screen X (left/right)
+                vy = -tempZ;  // Phone Z (top/bottom) → Screen Y (up/down), inverted
+                vz = tempX;   // Phone X (long edge) → Screen Z (forward/back)
+                
+                addDebugMessage(`📱 Edge: PhoneX→ScreenZ, PhoneY→ScreenX, PhoneZ→ScreenY`);
+                addDebugMessage(`📱 After rot: [${vx.toFixed(2)}, ${vy.toFixed(2)}, ${vz.toFixed(2)}]`);
+            }
+            
+            addDebugMessage(`Screen vel: x:${vx.toFixed(2)} y:${vy.toFixed(2)} z:${vz.toFixed(2)}`);
+            
+            // Apply LOFT ANGLE transformation
+            // NOW vy is the actual vertical (up/down) in screen coordinates
+            // In real golf, downward club motion (negative Y) produces upward ball flight
+            // The club face angle redirects the motion
+            const loftRadians = settings.loftAngle * Math.PI / 180;
+            
+            // Calculate horizontal speed (forward motion)
+            const horizontalSpeed = Math.sqrt(vx * vx + vz * vz);
+            
+            // If club is moving down (negative vy), loft redirects it upward
+            // New Y velocity = horizontal_speed * sin(loft) + |vy| * cos(loft)
+            let vyLofted;
+            if (vy < 0) {
+                // Downward swing - apply loft
+                vyLofted = horizontalSpeed * Math.sin(loftRadians) + Math.abs(vy) * Math.cos(loftRadians);
+                addDebugMessage(`Loft applied: ${vy.toFixed(2)} → ${vyLofted.toFixed(2)} (${settings.loftAngle}°)`);
+            } else {
+                // Already upward - keep it
+                vyLofted = vy;
+                addDebugMessage(`No loft needed (Y already positive)`);
+            }
+            
+            // Apply club weight scaling factor
+            const weightFactor = settings.clubWeight / 200;
+            const leverEffect = 4.0;
+            const energyTransferFactor = settings.impactPower;
+            const totalScale = weightFactor * leverEffect * energyTransferFactor;
+            
+            addDebugMessage(`Scale: ${totalScale.toFixed(1)}x`);
+            
+            // SMART Z-AXIS CORRECTION:
+            // In golf, ball should fly in direction of maximum horizontal swing motion
+            // Check which gives more total horizontal velocity: +Z or -Z
+            
+            const horizontalXZ = Math.sqrt(vx ** 2 + vz ** 2);
+            const scaledZ = vz * totalScale;
+            
+            // The ball should fly in the direction of the swing
+            // If we have significant horizontal motion, use that to determine forward
+            let finalVz;
+            
+            if (horizontalXZ > 0.1) {
+                // We have horizontal motion - check which Z direction makes more sense
+                // In most golf swings, the club moves more forward (away) than backward
+                // So we want the larger magnitude to be the "away" direction
+                
+                if (Math.abs(vz) > Math.abs(vx)) {
+                    // Z is dominant - use its sign to determine direction
+                    finalVz = Math.abs(scaledZ); // Always positive (away)
+                    addDebugMessage(`Z dominant: forcing AWAY (${finalVz.toFixed(1)})`);
+                } else {
+                    // X is dominant - Z contributes but we ensure it's in "away" direction
+                    // Typically in a golf swing, if club moves right (+X), ball should go forward (+Z)
+                    finalVz = Math.abs(scaledZ);
+                    addDebugMessage(`X dominant: Z set to AWAY (${finalVz.toFixed(1)})`);
+                }
+            } else {
+                // Very little horizontal motion - use raw Z but ensure it's away
+                finalVz = Math.abs(scaledZ);
+                addDebugMessage(`Low motion: Z forced AWAY (${finalVz.toFixed(1)})`);
+            }
+            
+            const result = {
+                x: vx * totalScale,
+                y: vyLofted * totalScale,  // Use lofted Y velocity
+                z: finalVz  // Always positive (away from camera)
+            };
+            
+            const totalVel = Math.sqrt(result.x ** 2 + result.y ** 2 + result.z ** 2);
+            addDebugMessage(`IMPACT: ${totalVel.toFixed(1)}m/s [x:${result.x.toFixed(1)}, y:${result.y.toFixed(1)}, z:${result.z.toFixed(1)}]`);
+            
+            return result;
+        }
+
+        // ============================================
+        // PART 5: BALL FLIGHT PHYSICS
+        // ============================================
+        // PURPOSE: Simulate realistic ball trajectory with gravity and air resistance
+        function launchBall(initialVelocity) {
+            // Velocity already has phone orientation applied in calculateImpactVelocity
+            const ballWeightFactor = 45.9 / settings.ballWeight; // Normalized to regulation 45.9g
+            
+            let vx = initialVelocity.x * ballWeightFactor;
+            let vy = initialVelocity.y * ballWeightFactor;
+            let vz = initialVelocity.z * ballWeightFactor;
+            
+            addDebugMessage(`🔧 Launch V: [${vx.toFixed(1)}, ${vy.toFixed(1)}, ${vz.toFixed(1)}]`);
+            
+            ballFlight.position = { x: 0, y: 0, z: 0 };  // Start at origin (ground level)
+            ballFlight.velocity = { x: vx, y: vy, z: vz };
+            ballFlight.flying = true;
+            ballFlight.startTime = Date.now();
+            ballFlight.lastUpdateTime = Date.now();
+            ballFlight.maxHeight = 0;
+            ballFlight.trajectory = [{ x: 0, y: 0, z: 0 }];  // Start trajectory
+            
+            // Store in lastShot for persistent HUD display
+            lastShot.velocity = { x: vx, y: vy, z: vz };
+            lastShot.timestamp = Date.now();
+            
+            // Debug: log launch velocity
+            const totalVel = Math.sqrt(
+                ballFlight.velocity.x ** 2 +
+                ballFlight.velocity.y ** 2 +
+                ballFlight.velocity.z ** 2
+            );
+            addDebugMessage(`🏌️ LAUNCH! ${totalVel.toFixed(1)}m/s`);
+            addDebugMessage(`V: [${ballFlight.velocity.x.toFixed(1)}, ${ballFlight.velocity.y.toFixed(1)}, ${ballFlight.velocity.z.toFixed(1)}]`);
+            
+            // CRITICAL: Verify launch direction
+            if (ballFlight.velocity.y <= 0) {
+                addDebugMessage(`⚠️ Y velocity ${ballFlight.velocity.y.toFixed(1)} ≤ 0! Ball won't go up!`);
+            } else {
+                addDebugMessage(`✓ Y velocity ${ballFlight.velocity.y.toFixed(1)} is UP`);
+            }
+            
+            if (ballFlight.velocity.z <= 0) {
+                addDebugMessage(`⚠️ Z velocity ${ballFlight.velocity.z.toFixed(1)} ≤ 0! Ball coming TOWARD you!`);
+            } else {
+                addDebugMessage(`✓ Z velocity ${ballFlight.velocity.z.toFixed(1)} is AWAY`);
+            }
+        }
+
+        function updateBallPhysics(deltaTime) {
+            // TODO: Implement physics simulation
+            // - Apply gravity
+            // - Apply air resistance
+            // - Update position based on velocity
+            // - Check for ground collision
+            
+            if (!ballFlight.flying) return;
+            
+            const dt = deltaTime / 1000; // Convert to seconds
+            
+            // Skip huge time deltas (first frame or tab was inactive)
+            if (dt > 0.1) {
+                addDebugMessage(`Skip physics: dt=${dt.toFixed(2)}s too large`);
+                return;
+            }
+            
+            // Use settings for gravity
+            const gravity = -settings.gravity; // m/s²
+            
+            // Update velocity with gravity
+            ballFlight.velocity.y += gravity * dt;
+            
+            // TODO: Apply air resistance based on settings.airResistance
+            // Air resistance is proportional to velocity squared
+            if (settings.airResistance > 0) {
+                const dragFactor = settings.airResistance * 0.01; // Scale factor
+                ballFlight.velocity.x *= (1 - dragFactor);
+                ballFlight.velocity.z *= (1 - dragFactor);
+                // Y-axis drag when moving upward
+                if (ballFlight.velocity.y > 0) {
+                    ballFlight.velocity.y *= (1 - dragFactor);
+                }
+            }
+            
+            // Update position
+            const oldPos = { ...ballFlight.position };
+            ballFlight.position.x += ballFlight.velocity.x * dt;
+            ballFlight.position.y += ballFlight.velocity.y * dt;
+            ballFlight.position.z += ballFlight.velocity.z * dt;
+            
+            // Store trajectory point (sample every few frames to avoid too many points)
+            if (ballFlight.trajectory.length === 0 || 
+                ballFlight.trajectory.length % 3 === 0) {  // Every 3rd frame
+                ballFlight.trajectory.push({ 
+                    x: ballFlight.position.x, 
+                    y: ballFlight.position.y, 
+                    z: ballFlight.position.z 
+                });
+            }
+            
+            // Log first few updates
+            const timeSinceLaunch = Date.now() - ballFlight.startTime;
+            if (timeSinceLaunch < 200) {  // First 200ms
+                const zDirection = ballFlight.position.z > 0 ? 'AWAY✓' : 'TOWARD⚠️';
+                addDebugMessage(`Physics: z=${ballFlight.position.z.toFixed(2)}m ${zDirection}`);
+            }
+            
+            // Track maximum height
+            if (ballFlight.position.y > ballFlight.maxHeight) {
+                ballFlight.maxHeight = ballFlight.position.y;
+            }
+            
+            // Check if ball hit ground
+            if (ballFlight.position.y <= 0 && ballFlight.velocity.y < 0) {
+                ballFlight.position.y = 0;
+                ballFlight.flying = false;
+                ballFlight.landingDistance = Math.sqrt(
+                    ballFlight.position.x ** 2 + ballFlight.position.z ** 2
+                );
+                
+                addDebugMessage(`⛳ LANDED! ${ballFlight.landingDistance.toFixed(2)}m, h:${ballFlight.maxHeight.toFixed(2)}m`);
+                
+                // Check if ball never left ground
+                if (ballFlight.maxHeight < 0.01) {
+                    addDebugMessage(`⚠️ BUG: Ball never left ground! Check Y velocity at launch`);
+                }
+                
+                // Play landing sound
+                playLandSound();
+                
+                // Calculate impact speed
+                const impactSpeed = Math.sqrt(
+                    swingData.impactVelocity.x ** 2 +
+                    swingData.impactVelocity.y ** 2 +
+                    swingData.impactVelocity.z ** 2
+                );
+                
+                // Save shot data
+                lastShot = {
+                    distance: ballFlight.landingDistance,
+                    maxHeight: ballFlight.maxHeight,
+                    impactSpeed: impactSpeed,
+                    timestamp: new Date().toISOString()
+                };
+                saveToLocalStorage();
+                
+                currentState = GameState.SHOWING_RESULTS;
+                updateStatus(`⛳ Ball landed! Distance: ${ballFlight.landingDistance.toFixed(2)}m`);
+            }
+        }
+
+        // ============================================
+        // PART 6: VISUALIZATION & RENDERING
+        // ============================================
+        // PURPOSE: Draw the game state on canvas
+        let lastRenderTime = 0;
+
+        function render(timestamp) {
+            const deltaTime = timestamp - lastRenderTime;
+            lastRenderTime = timestamp;
+            
+            // Clear canvas
+            ctx.fillStyle = '#87CEEB';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw ground
+            drawGround();
+            
+            // Update and draw based on state
+            switch (currentState) {
+                case GameState.READY_TO_SET_BALL:
+                    drawClubPosition();
+                    break;
+                    
+                case GameState.BALL_SET_READY_TO_SWING:
+                    drawClubPosition();
+                    // Show countdown and check timeout
+                    drawCountdownTimer();
+                    if (ballPosition.set) {
+                        checkSwingTimeout();
+                    }
+                    break;
+                    
+                case GameState.SWINGING:
+                    drawClubPosition();
+                    drawSwingTrail();
+                    break;
+                    
+                case GameState.BALL_FLYING:
+                    updateBallPhysics(deltaTime);
+                    drawBallTrajectory();
+                    drawBall();
+                    break;
+                    
+                case GameState.SHOWING_RESULTS:
+                    drawBallTrajectory();
+                    drawResults();
+                    break;
+            }
+            
+            // Draw debug info on canvas if enabled
+            drawDebugInfo();
+            
+            // Continue rendering loop
+            requestAnimationFrame(render);
+        }
+
+        function drawGround() {
+            // Draw perspective fairway looking down the course
+            const groundLine = canvas.height * groundLinePercent;
+            
+            // Sky
+            const gradient = ctx.createLinearGradient(0, 0, 0, groundLine);
+            gradient.addColorStop(0, '#87CEEB');
+            gradient.addColorStop(1, '#B0E0E6');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, groundLine);
+            
+            // Ground/fairway
+            ctx.fillStyle = '#90EE90';
+            ctx.fillRect(0, groundLine, canvas.width, canvas.height - groundLine);
+            
+            // Draw perspective grid to show depth
+            ctx.strokeStyle = 'rgba(0, 100, 0, 0.3)';
+            ctx.lineWidth = 1;
+            
+            // Horizontal lines (distance markers) - draw from near to far
+            for (let z = 0; z <= 100; z += 10) {
+                // Left and right edges of fairway
+                const leftPos = project3DToScreen(-5, 0, z);
+                const rightPos = project3DToScreen(5, 0, z);
+                
+                if (leftPos.visible && rightPos.visible) {
+                    ctx.beginPath();
+                    ctx.moveTo(leftPos.x, leftPos.y);
+                    ctx.lineTo(rightPos.x, rightPos.y);
+                    ctx.stroke();
+                }
+            }
+            
+            // Vertical lines (fairway edges)
+            ctx.strokeStyle = 'rgba(0, 100, 0, 0.5)';
+            ctx.lineWidth = 2;
+            
+            // Left edge
+            const nearLeft = project3DToScreen(-5, 0, 0);
+            const farLeft = project3DToScreen(-5, 0, 100);
+            if (nearLeft.visible || farLeft.visible) {
+                ctx.beginPath();
+                ctx.moveTo(nearLeft.x, nearLeft.y);
+                ctx.lineTo(farLeft.x, farLeft.y);
+                ctx.stroke();
+            }
+            
+            // Right edge
+            const nearRight = project3DToScreen(5, 0, 0);
+            const farRight = project3DToScreen(5, 0, 100);
+            if (nearRight.visible || farRight.visible) {
+                ctx.beginPath();
+                ctx.moveTo(nearRight.x, nearRight.y);
+                ctx.lineTo(farRight.x, farRight.y);
+                ctx.stroke();
+            }
+            
+            // Center line
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([5, 5]);
+            const nearCenter = project3DToScreen(0, 0, 0);
+            const farCenter = project3DToScreen(0, 0, 100);
+            if (nearCenter.visible || farCenter.visible) {
+                ctx.beginPath();
+                ctx.moveTo(nearCenter.x, nearCenter.y);
+                ctx.lineTo(farCenter.x, farCenter.y);
+                ctx.stroke();
+            }
+            ctx.setLineDash([]);
+        }
+
+        function drawClubPosition() {
+            // TODO: Visualize current club position/orientation
+            const x = canvas.width / 2;
+            const y = canvas.height / 2;
+            
+            // If no IMU permission yet, show instruction
+            if (!imuPermissionGranted) {
+                ctx.fillStyle = 'white';
+                ctx.font = 'bold 28px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('🏌️ Air Golf', x, y - 90);
+                
+                ctx.font = '18px Arial';
+                ctx.fillStyle = '#ffdd00';
+                ctx.fillText('Hold phone like a golf club', x, y - 45);
+                
+                ctx.font = '14px Arial';
+                ctx.fillStyle = '#aaa';
+                ctx.fillText('(Grip it naturally - edge or screen as club face)', x, y - 20);
+                
+                ctx.font = 'bold 20px Arial';
+                ctx.fillStyle = '#4CAF50';
+                ctx.fillText('↓ Tap "Tee Up" below ↓', x, y + 20);
+                
+                ctx.font = '12px Arial';
+                ctx.fillStyle = '#999';
+                ctx.fillText('Adjust "Phone Orientation" in Settings if needed', x, y + 45);
+                return;
+            }
+            
+            // Show ball position indicator if ball is set
+            if (ballPosition.set) {
+                // Draw tee position (ball at origin in 3D space)
+                const teePos = project3DToScreen(0, 0, 0);
+                
+                if (teePos.visible) {
+                    const ballRadius = Math.max(8, settings.ballDiameter * teePos.scale * 0.3);
+                    
+                    // Draw hit zone (detection area)
+                    const hitZoneRadius = Math.max(30, settings.hitZoneDiameter * teePos.scale * 0.6);
+                    ctx.fillStyle = 'rgba(255, 255, 0, 0.1)';
+                    ctx.strokeStyle = 'rgba(255, 255, 0, 0.5)';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.arc(teePos.x, teePos.y, hitZoneRadius, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.stroke();
+                    
+                    // Draw club tip position indicator
+                    const clubTipPos = project3DToScreen(
+                        clubTipTracking.tipPosition.x,
+                        clubTipTracking.tipPosition.y,
+                        clubTipTracking.tipPosition.z
+                    );
+                    
+                    if (clubTipPos.visible) {
+                        const tipDist = Math.sqrt(
+                            clubTipTracking.tipPosition.x ** 2 +
+                            clubTipTracking.tipPosition.y ** 2 +
+                            clubTipTracking.tipPosition.z ** 2
+                        );
+                        
+                        // Color based on distance from ball
+                        let tipColor = 'yellow';
+                        if (tipDist < settings.hitZoneDiameter / 200) {
+                            tipColor = 'lime'; // In hit zone!
+                        } else if (tipDist > 0.5) {
+                            tipColor = 'red'; // Too far
+                        }
+                        
+                        // Draw club tip dot
+                        ctx.fillStyle = tipColor;
+                        ctx.strokeStyle = 'black';
+                        ctx.lineWidth = 2;
+                        ctx.beginPath();
+                        ctx.arc(clubTipPos.x, clubTipPos.y, 6, 0, Math.PI * 2);
+                        ctx.fill();
+                        ctx.stroke();
+                        
+                        // Draw line from ball to club tip
+                        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+                        ctx.lineWidth = 1;
+                        ctx.setLineDash([2, 2]);
+                        ctx.beginPath();
+                        ctx.moveTo(teePos.x, teePos.y);
+                        ctx.lineTo(clubTipPos.x, clubTipPos.y);
+                        ctx.stroke();
+                        ctx.setLineDash([]);
+                    }
+                    
+                    // Draw tee marker
+                    ctx.fillStyle = 'rgba(139, 69, 19, 0.8)';
+                    const teeHeight = Math.max(10, 15 * teePos.scale / 100);
+                    ctx.fillRect(teePos.x - 1, teePos.y - teeHeight, 2, teeHeight);
+                    
+                    // Draw ball glow
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+                    ctx.beginPath();
+                    ctx.arc(teePos.x, teePos.y - teeHeight, ballRadius * 1.3, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    // Draw ball
+                    ctx.fillStyle = 'white';
+                    ctx.strokeStyle = 'black';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.arc(teePos.x, teePos.y - teeHeight, ballRadius, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.stroke();
+                    
+                    // Text above ball
+                    ctx.fillStyle = 'yellow';
+                    ctx.font = 'bold 20px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.shadowColor = 'black';
+                    ctx.shadowBlur = 4;
+                    ctx.fillText('READY', teePos.x, teePos.y - teeHeight - ballRadius - 25);
+                    ctx.fillText('Swing!', teePos.x, teePos.y - teeHeight - ballRadius - 5);
+                    ctx.shadowBlur = 0;
+                } else {
+                    // Fallback if projection fails - draw in center
+                    const centerX = canvas.width / 2;
+                    const centerY = canvas.height * 0.8;
+                    
+                    ctx.fillStyle = 'white';
+                    ctx.strokeStyle = 'black';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.arc(centerX, centerY, 10, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.stroke();
+                    
+                    ctx.fillStyle = 'yellow';
+                    ctx.font = 'bold 20px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('READY - Swing!', centerX, centerY - 30);
+                }
+            }
+            
+            // Show orientation values
+            ctx.fillStyle = 'white';
+            ctx.font = '18px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(`α:${imuData.orientation.alpha.toFixed(0)}°`, x, y);
+            ctx.fillText(`β:${imuData.orientation.beta.toFixed(0)}°`, x, y + 25);
+            ctx.fillText(`γ:${imuData.orientation.gamma.toFixed(0)}°`, x, y + 50);
+        }
+
+        function drawCountdownTimer() {
+            // Show countdown timer
+            if (swingTimer.timeRemaining > 0) {
+                const centerX = canvas.width / 2;
+                const timerY = 120;
+                
+                // Determine color based on time remaining
+                let timerColor = '#4CAF50'; // Green
+                if (swingTimer.timeRemaining <= 3) {
+                    timerColor = '#ff4444'; // Red - urgent!
+                } else if (swingTimer.timeRemaining <= 5) {
+                    timerColor = '#ffaa00'; // Orange - warning
+                }
+                
+                // Draw timer background
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                ctx.fillRect(centerX - 80, timerY - 30, 160, 50);
+                
+                // Draw timer text
+                ctx.fillStyle = timerColor;
+                ctx.font = 'bold 32px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(Math.ceil(swingTimer.timeRemaining) + 's', centerX, timerY + 5);
+                
+                // Flash warning when low
+                if (swingTimer.timeRemaining <= 3 && Math.floor(swingTimer.timeRemaining * 2) % 2 === 0) {
+                    ctx.fillStyle = 'rgba(255, 68, 68, 0.3)';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                }
+            }
+        }
+
+        function drawSwingTrail() {
+            // TODO: Draw visual trail showing swing path
+            // Use swingData.recordedMotion to visualize swing
+            
+            // Show countdown timer
+            drawCountdownTimer();
+            
+            // Show swing power meter
+            const totalAccel = Math.sqrt(
+                imuData.acceleration.x ** 2 +
+                imuData.acceleration.y ** 2 +
+                imuData.acceleration.z ** 2
+            );
+            
+            const meterWidth = canvas.width * 0.8;
+            const meterHeight = 40;
+            const meterX = canvas.width * 0.1;
+            const meterY = 200;
+            
+            // Background
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.fillRect(meterX, meterY, meterWidth, meterHeight);
+            
+            // Power bar
+            const powerPercent = Math.min(totalAccel / 20, 1); // Scale to 20 m/s²
+            ctx.fillStyle = powerPercent > 0.7 ? '#ff4444' : powerPercent > 0.4 ? '#ffaa00' : '#44ff44';
+            ctx.fillRect(meterX, meterY, meterWidth * powerPercent, meterHeight);
+            
+            // Label
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 20px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('SWING POWER', canvas.width / 2, meterY - 10);
+            ctx.fillText(totalAccel.toFixed(1) + ' m/s²', canvas.width / 2, meterY + 28);
+            
+            // Draw club tip trail
+            if (clubTipTracking.history.length > 1) {
+                const centerX = canvas.width / 2;
+                // Center of green area (same as ball position)
+                const groundTop = canvas.height * 0.7;
+                const centerY = groundTop + (canvas.height - groundTop) / 2;
+                const scale = 100; // Scale factor for visualization
+                
+                ctx.strokeStyle = 'rgba(255, 255, 0, 0.8)';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                
+                clubTipTracking.history.forEach((point, i) => {
+                    const screenX = centerX + point.position.x * scale;
+                    const screenY = centerY - point.position.y * scale;
+                    
+                    if (i === 0) {
+                        ctx.moveTo(screenX, screenY);
+                    } else {
+                        ctx.lineTo(screenX, screenY);
+                    }
+                });
+                
+                ctx.stroke();
+                
+                // Draw current club tip position
+                if (clubTipTracking.history.length > 0) {
+                    const current = clubTipTracking.history[clubTipTracking.history.length - 1];
+                    const tipX = centerX + current.position.x * scale;
+                    const tipY = centerY - current.position.y * scale;
+                    
+                    ctx.fillStyle = '#ffff00';
+                    ctx.beginPath();
+                    ctx.arc(tipX, tipY, 8, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.strokeStyle = '#ff0000';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                }
+            }
+        }
+
+        function drawBall() {
+            // Draw ball in 3D space with perspective projection
+            const pos = project3DToScreen(
+                ballFlight.position.x,
+                ballFlight.position.y,
+                ballFlight.position.z
+            );
+            
+            // Debug: log ball position for first few frames
+            const timeSinceLaunch = Date.now() - ballFlight.startTime;
+            if (timeSinceLaunch < 500) {
+                const growing = pos.scale > 100; // Scale increases as ball comes closer
+                const direction = growing ? '→YOU⚠️' : '→AWAY✓';
+                addDebugMessage(`Ball: z=${ballFlight.position.z.toFixed(1)}m ${direction}`);
+            }
+            
+            // Only draw if ball is visible
+            if (!pos.visible) return;
+            
+            // Ball gets smaller with distance (perspective)
+            const ballRadius = Math.max(3, settings.ballDiameter * pos.scale * 0.3);
+            
+            // Shadow on ground
+            const shadowPos = project3DToScreen(
+                ballFlight.position.x,
+                0, // on ground
+                ballFlight.position.z
+            );
+            
+            if (shadowPos.visible) {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+                ctx.beginPath();
+                const shadowRadius = Math.max(2, settings.ballDiameter * shadowPos.scale * 0.25);
+                ctx.ellipse(shadowPos.x, shadowPos.y, shadowRadius, shadowRadius * 0.5, 0, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            
+            // Ball
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(pos.x, pos.y, ballRadius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = Math.max(1, ballRadius * 0.1);
+            ctx.stroke();
+            
+            // Distance indicator
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.font = `${Math.max(10, 12 * pos.scale / 100)}px Arial`;
+            ctx.textAlign = 'center';
+            const dist = Math.sqrt(
+                ballFlight.position.x ** 2 +
+                ballFlight.position.z ** 2
+            );
+            ctx.fillText(`${dist.toFixed(1)}m`, pos.x, pos.y - ballRadius - 5);
+        }
+
+        function drawBallTrajectory() {
+            // Draw the ball's flight path in 3D perspective
+            if (ballFlight.trajectory.length < 2) return;
+            
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 5]);
+            
+            ctx.beginPath();
+            let hasStarted = false;
+            
+            for (let i = 0; i < ballFlight.trajectory.length; i++) {
+                const point = ballFlight.trajectory[i];
+                const pos = project3DToScreen(point.x, point.y, point.z);
+                
+                if (pos.visible) {
+                    if (!hasStarted) {
+                        ctx.moveTo(pos.x, pos.y);
+                        hasStarted = true;
+                    } else {
+                        ctx.lineTo(pos.x, pos.y);
+                    }
+                }
+            }
+            
+            if (hasStarted) {
+                ctx.stroke();
+            }
+            ctx.setLineDash([]);  // Reset to solid
+        }
+
+        function drawResults() {
+            // TODO: Show final statistics
+            // - Total distance
+            // - Max height
+            // - Swing speed
+            // - Swing visualization
+            
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+            ctx.fillRect(centerX - 160, centerY - 160, 320, 320);
+            
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 28px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('Shot Complete! 🏌️', centerX, centerY - 120);
+            
+            ctx.font = '20px Arial';
+            ctx.fillText(`Distance: ${ballFlight.landingDistance.toFixed(2)}m`, centerX, centerY - 80);
+            ctx.fillText(`Max Height: ${ballFlight.maxHeight.toFixed(2)}m`, centerX, centerY - 50);
+            
+            if (lastShot.impactSpeed) {
+                ctx.fillText(`Impact Speed: ${lastShot.impactSpeed.toFixed(1)}m/s`, centerX, centerY - 20);
+            }
+            
+            // Show velocity components for debugging
+            ctx.font = '14px Arial';
+            ctx.fillStyle = '#ffff00';
+            ctx.fillText(`Launch velocity:`, centerX, centerY + 10);
+            ctx.font = '16px monospace';
+            ctx.fillText(`X:${ballFlight.velocity.x.toFixed(1)} Y:${ballFlight.velocity.y.toFixed(1)} Z:${ballFlight.velocity.z.toFixed(1)}`, centerX, centerY + 30);
+            ctx.font = '12px Arial';
+            ctx.fillText(`(Enable Debug to see detailed logs)`, centerX, centerY + 50);
+            
+            // Show last shot if available
+            if (lastShot.timestamp) {
+                ctx.font = '14px Arial';
+                ctx.fillStyle = '#aaa';
+                const shotDate = new Date(lastShot.timestamp);
+                ctx.fillText(`Last shot: ${shotDate.toLocaleTimeString()}`, centerX, centerY + 75);
+            }
+            
+            ctx.font = '16px Arial';
+            ctx.fillStyle = '#4CAF50';
+            ctx.fillText('Tap Reset to play again', centerX, centerY + 105);
+        }
+
+        // ============================================
+        // PART 7: UI UPDATES
+        // ============================================
+        function updateStatus(message) {
+            statusDiv.textContent = 'Status: ' + message;
+        }
+
+        function drawDebugInfo() {
+            if (!settings.showDebug) return;
+            
+            // Draw debug overlay in top-left corner
+            const debugX = 10;
+            const debugY = 10;
+            const debugWidth = Math.min(canvas.width - 20, 400);
+            const debugHeight = 250; // Fixed height
+            
+            // Semi-transparent background
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+            ctx.fillRect(debugX - 5, debugY - 5, debugWidth + 10, debugHeight + 10);
+            
+            // Title
+            ctx.fillStyle = '#00ff00';
+            ctx.font = 'bold 14px monospace';
+            ctx.textAlign = 'left';
+            ctx.fillText('DEBUG LOG:', debugX, debugY + 15);
+            
+            // PERSISTENT HUD: Show current tip position (doesn't scroll)
+            if (ballPosition.set) {
+                const tipDist = Math.sqrt(
+                    clubTipTracking.tipPosition.x ** 2 +
+                    clubTipTracking.tipPosition.y ** 2 +
+                    clubTipTracking.tipPosition.z ** 2
+                );
+                
+                ctx.fillStyle = '#ffff00';
+                ctx.font = 'bold 11px monospace';
+                ctx.fillText(`TIP: [${clubTipTracking.tipPosition.x.toFixed(2)}, ${clubTipTracking.tipPosition.y.toFixed(2)}, ${clubTipTracking.tipPosition.z.toFixed(2)}] ${tipDist.toFixed(2)}m`, debugX, debugY + 30);
+            }
+            
+            // PERSISTENT HUD: Last shot velocity (stays visible!)
+            if (lastShot.velocity) {
+                ctx.fillStyle = '#ff00ff';
+                ctx.font = 'bold 11px monospace';
+                ctx.fillText(`LAST: V[${lastShot.velocity.x.toFixed(1)}, ${lastShot.velocity.y.toFixed(1)}, ${lastShot.velocity.z.toFixed(1)}] ${settings.phoneOrientation}`, debugX, debugY + 43);
+            }
+            
+            // Debug messages (scrolling log)
+            ctx.font = '11px monospace';
+            ctx.fillStyle = '#00ff00';
+            let lineY = debugY + 63; // Start below HUD
+            const lineHeight = 14;
+            
+            // Reserve space for coordinate legend at bottom (55px)
+            const availableHeight = debugHeight - 118; // 63 for top + HUD, 55 for bottom
+            const maxLines = Math.floor(availableHeight / lineHeight);
+            
+            // Show last N messages that fit (most recent at bottom)
+            const visibleMessages = debugLog.messages.slice(-maxLines);
+            visibleMessages.forEach(msg => {
+                ctx.fillText(msg, debugX, lineY);
+                lineY += lineHeight;
+            });
+            
+            // If no messages yet, show IMU data
+            if (debugLog.messages.length === 0 && imuPermissionGranted) {
+                ctx.fillText('Waiting for events...', debugX, lineY);
+            }
+            
+            // Draw coordinate system indicator (bottom of debug box)
+            const coordY = debugY + debugHeight - 55;
+            ctx.fillStyle = '#ffff00';
+            ctx.font = 'bold 10px monospace';
+            ctx.fillText(`MODE: ${settings.phoneOrientation === 'edge' ? 'EDGE FIRST 🏌️' : 'SCREEN FIRST 📱'}`, debugX, coordY);
+            ctx.fillStyle = '#00ff00';
+            ctx.font = '10px monospace';
+            ctx.fillText('Screen: X=L/R Y=UP/DOWN Z=AWAY', debugX, coordY + 12);
+            ctx.fillText('Ball should have: +Y (up) +Z (away)', debugX, coordY + 22);
+            ctx.fillText('If sideways: X is too big, Z too small', debugX, coordY + 32);
+        }
+
+        // ============================================
+        // PART 8: RESET FUNCTIONALITY
+        // ============================================
+        resetBtn.addEventListener('click', resetGame);
+
+        function resetGame() {
+            // TODO: Reset all state and start over
+            ballPosition.set = false;
+            swingData.recordedMotion = [];
+            swingData.hitDetected = false;
+            ballFlight.flying = false;
+            ballFlight.maxHeight = 0;
+            ballFlight.trajectory = [];
+            swingTimer.expired = false;
+            swingTimer.timeRemaining = 0;
+            
+            // Reset club tip tracking
+            clubTipTracking.quaternion = { w: 1, x: 0, y: 0, z: 0 };
+            clubTipTracking.tipPosition = { x: 0, y: 0, z: 0 };
+            clubTipTracking.tipVelocity = { x: 0, y: 0, z: 0 };
+            clubTipTracking.history = [];
+            clubTipTracking.lastUpdateTime = 0;
+            
+            // Clear debug log
+            debugLog.messages = [];
+            addDebugMessage(`🔄 Game reset`);
+            
+            currentState = GameState.READY_TO_SET_BALL;
+            setBallBtn.disabled = false;
+            
+            if (imuPermissionGranted) {
+                updateStatus('🔄 Ready for another shot! Tap "Tee Up"');
+            } else {
+                updateStatus('🔄 Reset! Tap "Tee Up" to begin');
+            }
+        }
+
+        // ============================================
+        // PART 9: SETTINGS MODAL
+        // ============================================
+        settingsBtn.addEventListener('click', openSettings);
+        saveSettingsBtn.addEventListener('click', saveSettings);
+        cancelSettingsBtn.addEventListener('click', closeSettings);
+        
+        // Update range displays
+        settingsInputs.hitSensitivity.addEventListener('input', function() {
+            document.getElementById('sensitivityValue').textContent = this.value;
+        });
+        settingsInputs.minSwingSpeed.addEventListener('input', function() {
+            document.getElementById('speedValue').textContent = parseFloat(this.value).toFixed(1);
+        });
+        settingsInputs.swingTimeout.addEventListener('input', function() {
+            document.getElementById('timeoutValue').textContent = this.value;
+        });
+        settingsInputs.loftAngle.addEventListener('input', function() {
+            document.getElementById('loftValue').textContent = this.value;
+        });
+        settingsInputs.airResistance.addEventListener('input', function() {
+            document.getElementById('airResValue').textContent = parseFloat(this.value).toFixed(1);
+        });
+        settingsInputs.impactPower.addEventListener('input', function() {
+            document.getElementById('impactPowerValue').textContent = this.value;
+        });
+        settingsInputs.soundVolume.addEventListener('input', function() {
+            document.getElementById('volumeValue').textContent = this.value;
+        });
+        
+        function openSettings() {
+            // Load current settings into inputs
+            settingsInputs.phoneOrientation.value = settings.phoneOrientation;
+            settingsInputs.clubLength.value = settings.clubLength;
+            settingsInputs.clubWeight.value = settings.clubWeight;
+            settingsInputs.loftAngle.value = settings.loftAngle;
+            settingsInputs.ballDiameter.value = settings.ballDiameter;
+            settingsInputs.ballWeight.value = settings.ballWeight;
+            settingsInputs.hitZoneDiameter.value = settings.hitZoneDiameter;
+            settingsInputs.hitSensitivity.value = settings.hitSensitivity;
+            settingsInputs.minSwingSpeed.value = settings.minSwingSpeed;
+            settingsInputs.swingTimeout.value = settings.swingTimeout;
+            settingsInputs.gravity.value = settings.gravity;
+            settingsInputs.airResistance.value = settings.airResistance;
+            settingsInputs.impactPower.value = settings.impactPower;
+            settingsInputs.showDebug.checked = settings.showDebug;
+            settingsInputs.soundEnabled.checked = settings.soundEnabled;
+            settingsInputs.soundVolume.value = settings.soundVolume;
+            
+            // Update range displays
+            document.getElementById('sensitivityValue').textContent = settings.hitSensitivity;
+            document.getElementById('speedValue').textContent = settings.minSwingSpeed.toFixed(1);
+            document.getElementById('timeoutValue').textContent = settings.swingTimeout;
+            document.getElementById('loftValue').textContent = settings.loftAngle;
+            document.getElementById('airResValue').textContent = settings.airResistance.toFixed(1);
+            document.getElementById('impactPowerValue').textContent = settings.impactPower;
+            document.getElementById('volumeValue').textContent = settings.soundVolume;
+            
+            settingsModal.classList.add('active');
+        }
+        
+        function saveSettings() {
+            // Save all settings
+            settings.phoneOrientation = settingsInputs.phoneOrientation.value;
+            settings.clubLength = parseFloat(settingsInputs.clubLength.value);
+            settings.clubWeight = parseFloat(settingsInputs.clubWeight.value);
+            settings.loftAngle = parseFloat(settingsInputs.loftAngle.value);
+            settings.ballDiameter = parseFloat(settingsInputs.ballDiameter.value);
+            settings.ballWeight = parseFloat(settingsInputs.ballWeight.value);
+            settings.hitZoneDiameter = parseFloat(settingsInputs.hitZoneDiameter.value);
+            settings.hitSensitivity = parseFloat(settingsInputs.hitSensitivity.value);
+            settings.minSwingSpeed = parseFloat(settingsInputs.minSwingSpeed.value);
+            settings.swingTimeout = parseFloat(settingsInputs.swingTimeout.value);
+            settings.gravity = parseFloat(settingsInputs.gravity.value);
+            settings.airResistance = parseFloat(settingsInputs.airResistance.value);
+            settings.impactPower = parseFloat(settingsInputs.impactPower.value);
+            settings.showDebug = settingsInputs.showDebug.checked;
+            settings.soundEnabled = settingsInputs.soundEnabled.checked;
+            settings.soundVolume = parseFloat(settingsInputs.soundVolume.value);
+            
+            // Save to localStorage
+            saveToLocalStorage();
+            
+            closeSettings();
+            updateStatus('⚙️ Settings saved!');
+        }
+        
+        function closeSettings() {
+            settingsModal.classList.remove('active');
+        }
+        
+        // Close modal when clicking outside
+        settingsModal.addEventListener('click', function(e) {
+            if (e.target === settingsModal) {
+                closeSettings();
+            }
+        });
+
+        // ============================================
+        // SUMMARY OF PARTS TO IMPLEMENT:
+        // ============================================
+        // [1] IMU Permission & Data Collection - ✅ DONE
+        // [2] IMU Data Processing - ✅ DONE - Store raw data
+        // [3] Ball Position Setting - ✅ DONE - Visual feedback working
+        // [4] Swing Detection - ✅ DONE - Madgwick filter sensor fusion implemented
+        // [5] Hit Detection - ✅ DONE - Uses club tip position + ball radius + backswing check
+        // [6] Velocity Calculation - ✅ DONE - Finite difference from position history
+        // [7] Ball Physics - Using settings for gravity & air resistance, tracks max height
+        // [8] 3D to 2D Projection - Placeholder, needs proper camera view
+        // [9] Swing Visualization - ✅ DONE - Shows club tip trail and current position
+        // [10] Results Display - ✅ DONE - Shows distance, max height, impact speed, timestamp
+        // [11] Settings System - ✅ DONE - Full configuration panel with swing timeout
+        // [12] Sound Effects - ✅ DONE - Hit, landing, and alarm sounds with volume control
+        // [13] Data Persistence - ✅ DONE - Settings and last shot saved to localStorage
+        // [14] Swing Timeout - ✅ DONE - Countdown timer with alarm to prevent IMU drift
+        // [15] Club Tip Tracking - ✅ DONE - Madgwick filter + quaternion + kinematic model
+    </script>
+</body>
+</html>
