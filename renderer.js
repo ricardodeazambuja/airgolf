@@ -2,7 +2,7 @@
 // RENDERER MODULE - COMPLETE IMPLEMENTATION
 // ============================================
 
-import { GameState, groundLinePercent } from './config.js';
+import { GameState, groundLinePercent, camera } from './config.js';
 import { project3DToScreen, debugLog, addDebugMessage } from './utils.js';
 import { clubTipTracking } from './tracking.js';
 import { ballFlight } from './physics.js';
@@ -25,6 +25,13 @@ let lastShot = null;
 let checkSwingTimeoutCallback = null;
 let updateBallPhysicsCallback = null;
 
+// Dynamic camera for auto-zoom during ball flight
+let dynamicCamera = {
+    distance: null,  // Will be calculated
+    height: null,
+    active: false  // When true, use dynamic values instead of config
+};
+
 export function initRenderer(canvasElement) {
     canvas = canvasElement;
     ctx = canvas.getContext('2d');
@@ -42,6 +49,109 @@ export function setRenderState(state) {
 export function setRenderCallbacks(callbacks) {
     checkSwingTimeoutCallback = callbacks.checkSwingTimeout;
     updateBallPhysicsCallback = callbacks.updateBallPhysics;
+}
+
+// ============================================
+// DYNAMIC CAMERA & PROJECTION
+// ============================================
+
+// Calculate trajectory bounds and update dynamic camera for auto-zoom
+function calculateDynamicCamera() {
+    if (ballFlight.trajectory.length < 2) {
+        dynamicCamera.active = false;
+        return;
+    }
+
+    // Find min/max bounds of trajectory
+    let minX = Infinity, maxX = -Infinity;
+    let minY = Infinity, maxY = -Infinity;
+    let minZ = Infinity, maxZ = -Infinity;
+
+    for (const point of ballFlight.trajectory) {
+        minX = Math.min(minX, point.x);
+        maxX = Math.max(maxX, point.x);
+        minY = Math.min(minY, point.y);
+        maxY = Math.max(maxY, point.y);
+        minZ = Math.min(minZ, point.z);
+        maxZ = Math.max(maxZ, point.z);
+    }
+
+    // Add current ball position if flying
+    if (ballFlight.flying) {
+        minX = Math.min(minX, ballFlight.position.x);
+        maxX = Math.max(maxX, ballFlight.position.x);
+        minY = Math.min(minY, ballFlight.position.y);
+        maxY = Math.max(maxY, ballFlight.position.y);
+        minZ = Math.min(minZ, ballFlight.position.z);
+        maxZ = Math.max(maxZ, ballFlight.position.z);
+    }
+
+    // Calculate required camera distance to fit trajectory on screen
+    // The key is to position camera so the farthest point is still visible
+
+    // Camera distance increases gradually with ball distance
+    // Use a logarithmic scale so it doesn't zoom out too aggressively
+    const maxDistance = Math.sqrt(maxX**2 + maxZ**2); // Horizontal distance to farthest point
+    const maxHeightRatio = maxY / Math.max(maxDistance, 1); // Height relative to distance
+
+    // Base distance on the farthest point, but scale reasonably
+    // For a 50m shot: distance = 4 + 50*0.08 = 8m (not 50m!)
+    const distanceForDepth = camera.distance + maxZ * 0.08;
+
+    // Account for height - if ball goes high, pull back slightly
+    const distanceForHeight = camera.distance + maxY * 0.15;
+
+    // Account for width - if ball hooks/slices, pull back
+    const trajectoryWidth = Math.abs(maxX - minX);
+    const distanceForWidth = camera.distance + trajectoryWidth * 0.3;
+
+    // Use the maximum, but cap it to avoid extreme zoom
+    const requiredDistance = Math.min(
+        Math.max(
+            distanceForDepth,
+            distanceForHeight,
+            distanceForWidth,
+            camera.distance  // Never closer than default
+        ),
+        20  // Maximum distance cap to prevent extreme zoom-out
+    );
+
+    // Smooth camera transition (lerp)
+    if (dynamicCamera.distance === null) {
+        dynamicCamera.distance = requiredDistance;
+        dynamicCamera.height = camera.height;
+    } else {
+        const smoothing = 0.15; // Responsive but smooth
+        dynamicCamera.distance += (requiredDistance - dynamicCamera.distance) * smoothing;
+    }
+
+    dynamicCamera.active = true;
+}
+
+// Project 3D to 2D using dynamic camera when active
+function projectWithCamera(worldX, worldY, worldZ) {
+    const cam = dynamicCamera.active ? dynamicCamera : camera;
+
+    const cameraZ = -cam.distance;
+    const cameraY = cam.height;
+
+    const relX = worldX;
+    const relY = worldY - cameraY;
+    const relZ = worldZ - cameraZ;
+
+    if (relZ <= 0.1) {
+        return { x: canvas.width / 2, y: canvas.height, scale: 0, visible: false };
+    }
+
+    const perspective = 250 / relZ;
+    const screenX = canvas.width / 2 + relX * perspective;
+    const groundLine = canvas.height * groundLinePercent;
+    const screenY = groundLine - relY * perspective;
+
+    const visible = screenX >= -50 && screenX <= canvas.width + 50 &&
+                  screenY >= -50 && screenY <= canvas.height + 50;
+
+    return { x: screenX, y: screenY, scale: perspective, visible: visible };
 }
 
 export function render(timestamp) {
@@ -77,13 +187,24 @@ break;
 
 case GameState.BALL_FLYING:
 updateBallPhysicsCallback(deltaTime);
+calculateDynamicCamera(); // Auto-zoom to fit trajectory
 drawBallTrajectory();
 drawBall();
 break;
 
 case GameState.SHOWING_RESULTS:
+calculateDynamicCamera(); // Keep auto-zoom for results view
 drawBallTrajectory();
 drawResults();
+break;
+
+default:
+// Reset dynamic camera when not viewing ball flight
+if (dynamicCamera.active) {
+    dynamicCamera.active = false;
+    dynamicCamera.distance = null;
+    dynamicCamera.height = null;
+}
 break;
 }
 
@@ -527,8 +648,8 @@ ctx.lineWidth = 1;
 // Horizontal lines (distance markers) - draw from near to far
 for (let z = 0; z <= 100; z += 10) {
 // Left and right edges of fairway
-const leftPos = project3DToScreen(-5, 0, z, canvas);
-const rightPos = project3DToScreen(5, 0, z, canvas);
+const leftPos = projectWithCamera(-5, 0, z);
+const rightPos = projectWithCamera(5, 0, z);
 
 if (leftPos.visible && rightPos.visible) {
 ctx.beginPath();
@@ -543,8 +664,8 @@ ctx.strokeStyle = 'rgba(0, 100, 0, 0.5)';
 ctx.lineWidth = 2;
 
 // Left edge
-const nearLeft = project3DToScreen(-5, 0, 0, canvas);
-const farLeft = project3DToScreen(-5, 0, 100, canvas);
+const nearLeft = projectWithCamera(-5, 0, 0);
+const farLeft = projectWithCamera(-5, 0, 100);
 if (nearLeft.visible || farLeft.visible) {
 ctx.beginPath();
 ctx.moveTo(nearLeft.x, nearLeft.y);
@@ -553,8 +674,8 @@ ctx.stroke();
 }
 
 // Right edge
-const nearRight = project3DToScreen(5, 0, 0, canvas);
-const farRight = project3DToScreen(5, 0, 100, canvas);
+const nearRight = projectWithCamera(5, 0, 0);
+const farRight = projectWithCamera(5, 0, 100);
 if (nearRight.visible || farRight.visible) {
 ctx.beginPath();
 ctx.moveTo(nearRight.x, nearRight.y);
@@ -566,8 +687,8 @@ ctx.stroke();
 ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
 ctx.lineWidth = 1;
 ctx.setLineDash([5, 5]);
-const nearCenter = project3DToScreen(0, 0, 0, canvas);
-const farCenter = project3DToScreen(0, 0, 100, canvas);
+const nearCenter = projectWithCamera(0, 0, 0);
+const farCenter = projectWithCamera(0, 0, 100);
 if (nearCenter.visible || farCenter.visible) {
 ctx.beginPath();
 ctx.moveTo(nearCenter.x, nearCenter.y);
@@ -840,12 +961,11 @@ ctx.stroke();
 }
 
 export function drawBall() {
-// Draw ball in 3D space with perspective projection
-const pos = project3DToScreen(
+// Draw ball in 3D space with perspective projection using dynamic camera
+const pos = projectWithCamera(
 ballFlight.position.x,
 ballFlight.position.y,
-ballFlight.position.z,
-canvas
+ballFlight.position.z
 );
 
 // Debug: log ball position for first few frames
@@ -863,11 +983,10 @@ if (!pos.visible) return;
 const ballRadius = Math.max(3, settings.ballDiameter * pos.scale * 0.3);
 
 // Shadow on ground
-const shadowPos = project3DToScreen(
+const shadowPos = projectWithCamera(
 ballFlight.position.x,
 0, // on ground
-ballFlight.position.z,
-canvas
+ballFlight.position.z
 );
 
 if (shadowPos.visible) {
@@ -924,19 +1043,33 @@ ctx.stroke();
 }
 
 export function drawBallTrajectory() {
-// Draw the ball's flight path in 3D perspective
-if (ballFlight.trajectory.length < 2) return;
+// Draw the ball's flight path in 3D perspective with enhanced visibility
+if (ballFlight.trajectory.length < 2) {
+    // Debug: trajectory not ready yet
+    if (ballFlight.flying && ballFlight.trajectory.length > 0) {
+        addDebugMessage(`Trajectory: ${ballFlight.trajectory.length} point(s) - need 2+`);
+    }
+    return;
+}
 
-ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
-ctx.lineWidth = 2;
-ctx.setLineDash([5, 5]);
+// Draw trajectory line with gradient for depth effect
+ctx.lineWidth = 3;
+ctx.lineCap = 'round';
+ctx.lineJoin = 'round';
 
+// Debug: confirm trajectory is being drawn
+if (ballFlight.trajectory.length >= 2 && ballFlight.trajectory.length < 5) {
+    addDebugMessage(`✨ Drawing trajectory: ${ballFlight.trajectory.length} points`);
+}
+
+// Main trajectory line
+ctx.strokeStyle = 'rgba(255, 255, 100, 0.8)'; // Bright yellow-white
 ctx.beginPath();
 let hasStarted = false;
 
 for (let i = 0; i < ballFlight.trajectory.length; i++) {
 const point = ballFlight.trajectory[i];
-const pos = project3DToScreen(point.x, point.y, point.z, canvas);
+const pos = projectWithCamera(point.x, point.y, point.z); // Use dynamic camera
 
 if (pos.visible) {
 if (!hasStarted) {
@@ -951,79 +1084,86 @@ ctx.lineTo(pos.x, pos.y);
 if (hasStarted) {
 ctx.stroke();
 }
+
+// Draw trajectory points as small dots for better visibility
+ctx.fillStyle = 'rgba(255, 200, 50, 0.6)';
+for (let i = 0; i < ballFlight.trajectory.length; i += 2) { // Every other point
+const point = ballFlight.trajectory[i];
+const pos = projectWithCamera(point.x, point.y, point.z);
+
+if (pos.visible) {
+ctx.beginPath();
+ctx.arc(pos.x, pos.y, 2, 0, Math.PI * 2);
+ctx.fill();
+}
+}
+
+// Draw trajectory shadow on ground for better depth perception
+ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
+ctx.lineWidth = 2;
+ctx.setLineDash([3, 3]);
+ctx.beginPath();
+hasStarted = false;
+
+for (let i = 0; i < ballFlight.trajectory.length; i++) {
+const point = ballFlight.trajectory[i];
+const groundPos = projectWithCamera(point.x, 0, point.z); // Project to ground (y=0)
+
+if (groundPos.visible) {
+if (!hasStarted) {
+ctx.moveTo(groundPos.x, groundPos.y);
+hasStarted = true;
+} else {
+ctx.lineTo(groundPos.x, groundPos.y);
+}
+}
+}
+
+if (hasStarted) {
+ctx.stroke();
+}
 ctx.setLineDash([]);  // Reset to solid
 }
 
 export function drawResults() {
-// TODO: Show final statistics
-// - Total distance
-// - Max height
-// - Swing speed
-// - Swing visualization
-
+// Compact overlay at top showing key stats without blocking trajectory view
 const centerX = canvas.width / 2;
-const centerY = canvas.height / 2;
 
-ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-ctx.fillRect(centerX - 160, centerY - 160, 320, 320);
+// Semi-transparent compact header at top
+ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+ctx.fillRect(0, 0, canvas.width, 100);
 
+// Title
 ctx.fillStyle = 'white';
-ctx.font = 'bold 28px Arial';
+ctx.font = 'bold 20px Arial';
 ctx.textAlign = 'center';
-ctx.fillText('Shot Complete! 🏌️', centerX, centerY - 120);
+ctx.fillText('⛳ Shot Complete!', centerX, 30);
 
-ctx.font = '20px Arial';
-ctx.fillText(`Distance: ${ballFlight.landingDistance.toFixed(2)}m`, centerX, centerY - 80);
-ctx.fillText(`Max Height: ${ballFlight.maxHeight.toFixed(2)}m`, centerX, centerY - 50);
+// Main stats in one line
+ctx.font = '16px Arial';
+const distText = `${ballFlight.landingDistance.toFixed(1)}m`;
+const heightText = `h:${ballFlight.maxHeight.toFixed(1)}m`;
+const speedText = lastShot.impactSpeed ? `${lastShot.impactSpeed.toFixed(1)}m/s` : '';
 
-if (lastShot.impactSpeed) {
-ctx.fillText(`Impact Speed: ${lastShot.impactSpeed.toFixed(1)}m/s`, centerX, centerY - 20);
-}
+ctx.fillText(`${distText} • ${heightText} • ${speedText}`, centerX, 60);
 
-// Show velocity components for debugging
-ctx.font = '14px Arial';
-ctx.fillStyle = '#ffff00';
-ctx.fillText(`Launch velocity:`, centerX, centerY + 10);
-ctx.font = '16px monospace';
-ctx.fillText(`X:${ballFlight.velocity.x.toFixed(1)} Y:${ballFlight.velocity.y.toFixed(1)} Z:${ballFlight.velocity.z.toFixed(1)}`, centerX, centerY + 30);
-
-// Show spin information
+// Spin indicator
 if (lastShot.spin) {
-ctx.font = '14px Arial';
-ctx.fillStyle = '#00ffff';
 const sidespin = lastShot.spin.y;
-let spinText = 'Straight';
+ctx.font = '14px Arial';
 if (Math.abs(sidespin) > 50) {
 if (sidespin > 0) {
-spinText = `SLICE →`;
+ctx.fillStyle = '#ff6666';
+ctx.fillText('SLICE →', centerX, 85);
 } else {
-spinText = `← HOOK`;
+ctx.fillStyle = '#6666ff';
+ctx.fillText('← HOOK', centerX, 85);
 }
-} else if (Math.abs(sidespin) > 20) {
-if (sidespin > 0) {
-spinText = `Fade →`;
 } else {
-spinText = `← Draw`;
+ctx.fillStyle = '#66ff66';
+ctx.fillText('STRAIGHT', centerX, 85);
 }
 }
-ctx.fillText(`Shot Shape: ${spinText}`, centerX, centerY + 50);
-}
-
-ctx.font = '12px Arial';
-ctx.fillStyle = '#aaa';
-ctx.fillText(`(Enable Debug to see detailed logs)`, centerX, centerY + 70);
-
-// Show last shot if available
-if (lastShot.timestamp) {
-ctx.font = '14px Arial';
-ctx.fillStyle = '#aaa';
-const shotDate = new Date(lastShot.timestamp);
-ctx.fillText(`Last shot: ${shotDate.toLocaleTimeString()}`, centerX, centerY + 95);
-}
-
-ctx.font = '16px Arial';
-ctx.fillStyle = '#4CAF50';
-ctx.fillText('Tap Reset to play again', centerX, centerY + 125);
 }
 
 export function drawDebugInfo() {

@@ -122,15 +122,13 @@ export function updateBallPhysics(deltaTime, settings, swingData, swingRecorder,
     ballFlight.position.y += ballFlight.velocity.y * dt;  // meters
     ballFlight.position.z += ballFlight.velocity.z * dt;  // meters
 
-    // Store trajectory point (sample every few frames to avoid too many points)
-    if (ballFlight.trajectory.length === 0 ||
-        ballFlight.trajectory.length % 3 === 0) {  // Every 3rd frame
-        ballFlight.trajectory.push({
-            x: ballFlight.position.x,
-            y: ballFlight.position.y,
-            z: ballFlight.position.z
-        });
-    }
+    // Store trajectory point for visualization
+    // Always store points to show the path
+    ballFlight.trajectory.push({
+        x: ballFlight.position.x,
+        y: ballFlight.position.y,
+        z: ballFlight.position.z
+    });
 
     // Log first few updates for debugging
     const timeSinceLaunch = Date.now() - ballFlight.startTime;
