@@ -1,0 +1,157 @@
+// ============================================
+// MAIN ENTRY POINT
+// ============================================
+// Initialize all modules and start the game
+
+import { defaultSettings } from './config.js';
+import { loadFromLocalStorage, saveToLocalStorage } from './storage.js';
+import { initRenderer, render, setRenderState, setRenderCallbacks } from './renderer.js';
+import { initUI, updateStatus } from './ui.js';
+import {  
+    getCurrentState, 
+    setCurrentState, 
+    setBallPosition,
+    ballPosition,
+    swingData,
+    swingTimer,
+    swingRecorder,
+    lastShot,
+    resetGame,
+    setGameSettings,
+    setUICallbacks,
+    recordSwingMotion
+} from './game-logic.js';
+import { requestIMUPermission, setSensorCallbacks, imuData, imuPermissionGranted as getIMUPermissionGranted } from './sensors.js';
+import { updateClubTipTracking } from './tracking.js';
+import { updateBallPhysics } from './physics.js';
+
+// ============================================
+// INITIALIZATION
+// ============================================
+
+// Load settings and last shot from localStorage
+const loaded = loadFromLocalStorage();
+const settings = loaded.settings;
+const loadedLastShot = loaded.lastShot;
+
+// Copy loaded last shot to lastShot
+Object.assign(lastShot, loadedLastShot);
+
+// Initialize game settings
+setGameSettings(settings);
+
+// Get canvas and context
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+// Set canvas size
+function resizeCanvas() {
+    canvas.width = canvas.clientWidth;
+    canvas.height = canvas.clientHeight;
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+// Get UI elements
+const elements = {
+    setBallBtn: document.getElementById('setBallBtn'),
+    resetBtn: document.getElementById('resetBtn'),
+    settingsBtn: document.getElementById('settingsBtn'),
+    recordBtn: document.getElementById('recordBtn'),
+    replayBtn: document.getElementById('replayBtn'),
+    statusDiv: document.getElementById('status'),
+    settingsModal: document.getElementById('settingsModal'),
+    saveSettingsBtn: document.getElementById('saveSettingsBtn'),
+    cancelSettingsBtn: document.getElementById('cancelSettingsBtn'),
+    settingsInputs: {
+        phoneOrientation: document.getElementById('phoneOrientation'),
+        clubLength: document.getElementById('clubLength'),
+        clubWeight: document.getElementById('clubWeight'),
+        loftAngle: document.getElementById('loftAngle'),
+        ballDiameter: document.getElementById('ballDiameter'),
+        ballWeight: document.getElementById('ballWeight'),
+        hitZoneDiameter: document.getElementById('hitZoneDiameter'),
+        hitSensitivity: document.getElementById('hitSensitivity'),
+        minSwingSpeed: document.getElementById('minSwingSpeed'),
+        swingTimeout: document.getElementById('swingTimeout'),
+        gravity: document.getElementById('gravity'),
+        airResistance: document.getElementById('airResistance'),
+        impactPower: document.getElementById('impactPower'),
+        spinEffect: document.getElementById('spinEffect'),
+        showDebug: document.getElementById('showDebug'),
+        soundEnabled: document.getElementById('soundEnabled'),
+        soundVolume: document.getElementById('soundVolume')
+    },
+    canvas: canvas
+};
+
+// Initialize renderer
+initRenderer(canvas);
+
+// Set up game-logic UI callbacks
+setUICallbacks({
+    setBallBtn: elements.setBallBtn,
+    replayBtn: elements.replayBtn,
+    updateStatus: updateStatus
+});
+
+// Set up sensor callbacks
+setSensorCallbacks({
+    updateClubTipTracking: () => updateClubTipTracking(imuData, settings, ballPosition, swingRecorder),
+    recordSwingMotion: recordSwingMotion,
+    updateStatus: updateStatus,
+    getCurrentState: getCurrentState,
+    onIMUInitialized: () => {
+        setCurrentState('ready_to_set_ball');
+        elements.resetBtn.disabled = false;
+    }
+});
+
+// Initialize UI with callbacks
+initUI(elements, {
+    resetGame: () => resetGame(getIMUPermissionGranted, updateStatus, elements.setBallBtn),
+    requestIMUPermission: requestIMUPermission,
+    setBallPosition: () => setBallPosition(settings, updateStatus, elements.setBallBtn),
+    settings: settings,
+    lastShot: lastShot
+});
+
+// Set render state
+setRenderState({
+    getCurrentState: getCurrentState,
+    settings: settings,
+    ballPosition: ballPosition,
+    swingTimer: swingTimer,
+    swingRecorder: swingRecorder,
+    lastShot: lastShot
+});
+
+// Set render callbacks
+setRenderCallbacks({
+    checkSwingTimeout: () => {
+        if (swingTimer.expired) return;
+        const elapsed = (Date.now() - swingTimer.startTime) / 1000;
+        swingTimer.timeRemaining = Math.max(0, settings.swingTimeout - elapsed);
+        if (swingTimer.timeRemaining <= 0) {
+            swingTimer.expired = true;
+        }
+    },
+    updateBallPhysics: (deltaTime) => updateBallPhysics(
+        deltaTime, 
+        settings, 
+        swingData, 
+        swingRecorder, 
+        lastShot,
+        () => saveToLocalStorage(settings, lastShot),
+        updateStatus,
+        setCurrentState
+    )
+});
+
+// Start render loop
+requestAnimationFrame(render);
+
+// Display initial status
+updateStatus('🏌️ Welcome! Hold your phone like a golf club, then tap "Tee Up"');
+
+console.log('Air Golf initialized successfully!');
