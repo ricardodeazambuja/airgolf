@@ -13,6 +13,11 @@ const audioContext = new (window.AudioContext || window.webkitAudioContext)();
 export function playHitSound(settings) {
     if (!settings.soundEnabled) return;
 
+    // iOS fix: Blur focused elements during audio playback
+    if (document.activeElement && document.activeElement.blur) {
+        document.activeElement.blur();
+    }
+
     const now = audioContext.currentTime;
     const volume = settings.soundVolume / 100;
 
@@ -38,6 +43,11 @@ export function playHitSound(settings) {
 export function playLandSound(settings) {
     if (!settings.soundEnabled) return;
 
+    // iOS fix: Blur focused elements during audio playback
+    if (document.activeElement && document.activeElement.blur) {
+        document.activeElement.blur();
+    }
+
     const now = audioContext.currentTime;
     const volume = settings.soundVolume / 100;
 
@@ -62,6 +72,11 @@ export function playLandSound(settings) {
 
 export function playAlarmSound(settings) {
     if (!settings.soundEnabled) return;
+
+    // iOS fix: Blur any focused element before alarm (prevents shake-to-undo during timeout)
+    if (document.activeElement && document.activeElement.blur) {
+        document.activeElement.blur();
+    }
 
     const now = audioContext.currentTime;
     const volume = settings.soundVolume / 100;
