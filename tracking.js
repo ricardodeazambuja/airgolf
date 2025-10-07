@@ -38,7 +38,7 @@ export const clubTipTracking = {
 // ============================================
 // PURPOSE: Combine accelerometer and gyroscope data for accurate orientation
 
-function madgwickFilterUpdate(gx, gy, gz, ax, ay, az, dt) {
+function madgwickFilterUpdate(gx, gy, gz, ax, ay, az, dt, mx = 0, my = 0, mz = 0) {
     // Convert gyroscope degrees/sec to radians/sec
     gx = gx * Math.PI / 180;
     gy = gy * Math.PI / 180;
@@ -70,11 +70,41 @@ function madgwickFilterUpdate(gx, gy, gz, ax, ay, az, dt) {
     const q2q2 = q.y * q.y;
     const q3q3 = q.z * q.z;
 
-    // Gradient (matrix calculations)
-    const s0 = _4q0 * q2q2 + _2q2 * ax + _4q0 * q1q1 - _2q1 * ay;
-    const s1 = _4q1 * q3q3 - _2q3 * ax + 4 * q0q0 * q.x - _2q0 * ay - _4q1 + _8q1 * q1q1 + _8q1 * q2q2 + _4q1 * az;
-    const s2 = 4 * q0q0 * q.y + _2q0 * ax + _4q2 * q3q3 - _2q3 * ay - _4q2 + _8q2 * q1q1 + _8q2 * q2q2 + _4q2 * az;
-    const s3 = 4 * q1q1 * q.z - _2q1 * ax + 4 * q2q2 * q.z - _2q2 * ay;
+    // Gradient from accelerometer (6DOF - always computed)
+    let s0 = _4q0 * q2q2 + _2q2 * ax + _4q0 * q1q1 - _2q1 * ay;
+    let s1 = _4q1 * q3q3 - _2q3 * ax + 4 * q0q0 * q.x - _2q0 * ay - _4q1 + _8q1 * q1q1 + _8q1 * q2q2 + _4q1 * az;
+    let s2 = 4 * q0q0 * q.y + _2q0 * ax + _4q2 * q3q3 - _2q3 * ay - _4q2 + _8q2 * q1q1 + _8q2 * q2q2 + _4q2 * az;
+    let s3 = 4 * q1q1 * q.z - _2q1 * ax + 4 * q2q2 * q.z - _2q2 * ay;
+
+    // Magnetometer correction (9DOF - only if magnetometer data available)
+    if (mx !== 0 || my !== 0 || mz !== 0) {
+        // Normalize magnetometer measurement
+        const mNorm = Math.sqrt(mx * mx + my * my + mz * mz);
+        if (mNorm > 0) {
+            mx /= mNorm;
+            my /= mNorm;
+            mz /= mNorm;
+
+            // Reference direction of Earth's magnetic field (in quaternion frame)
+            const _2q0mx = 2 * q.w * mx;
+            const _2q0my = 2 * q.w * my;
+            const _2q0mz = 2 * q.w * mz;
+            const _2q1mx = 2 * q.x * mx;
+
+            const hx = mx * q0q0 - _2q0my * q.z + _2q0mz * q.y + mx * q1q1 + _2q1 * my * q.y + _2q1 * mz * q.z - mx * q2q2 - mx * q3q3;
+            const hy = _2q0mx * q.z + my * q0q0 - _2q0mz * q.x + _2q1mx * q.y - my * q1q1 + my * q2q2 + _2q2 * mz * q.z - my * q3q3;
+            const _2bx = Math.sqrt(hx * hx + hy * hy);
+            const _2bz = -_2q0mx * q.y + _2q0my * q.x + mz * q0q0 + _2q1mx * q.z - mz * q1q1 + _2q2 * my * q.z - mz * q2q2 + mz * q3q3;
+            const _4bx = 2 * _2bx;
+            const _4bz = 2 * _2bz;
+
+            // Magnetometer gradient (add to accelerometer gradient)
+            s0 -= (-_2q2 * _2bx * (q1q1 + q2q2 - 0.5 - q3q3) + _2q3 * _2bz * (q1q2 - q0q3));
+            s1 -= (_2q2 * _2bx * (q0q2 + q1q3) - _2q3 * _2bz * (q0q1 + q2q3));
+            s2 -= (-_2q1 * _2bx * (q0q2 + q1q3) - _2q0 * _2bz * (0.5 - q1q1 - q2q2) + _4bz * q.y);
+            s3 -= (_2q1 * _2bx * (q1q1 + q2q2 - 0.5 - q3q3) + _2q0 * _2bz * (q0q1 - q2q3) - _4bx * q.z);
+        }
+    }
 
     const sNorm = Math.sqrt(s0 * s0 + s1 * s1 + s2 * s2 + s3 * s3);
 
@@ -166,7 +196,29 @@ export function updateClubTipTracking(imuData, settings, ballPosition, swingReco
     // Skip if dt is too large (first frame or tab was inactive)
     if (dt > 0.1) return;
 
-    // Update orientation using Madgwick filter
+    // Debug: Check compass availability (first 100 frames only)
+    if (clubTipTracking.history.length < 100 && clubTipTracking.history.length % 20 === 0) {
+        const compassHeading = imuData.orientation.alpha;
+        if (compassHeading !== null && compassHeading !== undefined) {
+            addDebugMessage(`🧭 9DOF mode: Compass ${compassHeading.toFixed(1)}° (yaw drift correction active)`);
+        } else {
+            addDebugMessage(`⚠️ 6DOF mode: Compass unavailable (gyro+accel only)`);
+        }
+    }
+
+    // Convert compass heading to magnetometer components (if available)
+    let mx = 0, my = 0, mz = 0;
+    const compassHeading = imuData.orientation.alpha;
+    if (compassHeading !== null && compassHeading !== undefined) {
+        // Convert compass heading (0-360°) to magnetometer vector
+        // alpha: 0° = North, 90° = East, 180° = South, 270° = West
+        const headingRad = compassHeading * Math.PI / 180;
+        mx = Math.cos(headingRad);  // North component
+        my = Math.sin(headingRad);  // East component
+        mz = 0;  // Assuming horizontal (vertical component negligible)
+    }
+
+    // Update orientation using Madgwick filter (6DOF or 9DOF)
     madgwickFilterUpdate(
         imuData.rotationRate.alpha || 0,
         imuData.rotationRate.beta || 0,
@@ -174,8 +226,18 @@ export function updateClubTipTracking(imuData, settings, ballPosition, swingReco
         imuData.acceleration.x || 0,
         imuData.acceleration.y || 0,
         imuData.acceleration.z || 0,
-        dt
+        dt,
+        mx, my, mz  // Magnetometer (0,0,0 if unavailable → 6DOF mode)
     );
+
+    // Safety check: verify quaternion is valid (first 10 frames)
+    if (clubTipTracking.history.length < 10) {
+        const q = clubTipTracking.quaternion;
+        const qMag = Math.sqrt(q.w * q.w + q.x * q.x + q.y * q.y + q.z * q.z);
+        if (!isFinite(qMag) || Math.abs(qMag - 1.0) > 0.01) {
+            addDebugMessage(`⚠️ Quaternion invalid: mag=${qMag.toFixed(3)} (should be 1.0)`);
+        }
+    }
 
     // Calculate club tip position from orientation
     calculateClubTipPosition(settings);
