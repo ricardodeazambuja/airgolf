@@ -15,6 +15,7 @@ export const ballFlight = {
     position: { x: 0, y: 0, z: 0 },     // 3D position in world space
     velocity: { x: 0, y: 0, z: 0 },     // Current velocity
     spin: { x: 0, y: 0, z: 0 },         // Spin rate (rad/s) - causes Magnus effect
+    initialSpin: { x: 0, y: 0, z: 0 },  // Initial spin at launch (before decay)
     flying: false,
     startTime: 0,
     lastUpdateTime: 0,  // For per-frame delta time
@@ -185,7 +186,7 @@ export function updateBallPhysics(deltaTime, settings, swingData, swingRecorder,
         lastShot.impactSpeed = impactSpeed;
         lastShot.timestamp = new Date().toISOString();
         lastShot.velocity = { ...swingData.impactVelocity };
-        lastShot.spin = { ...ballFlight.spin };
+        lastShot.spin = { ...ballFlight.initialSpin };  // Use initial spin, not decayed
 
         saveToLocalStorage();
 
@@ -201,6 +202,7 @@ export function resetBallFlight() {
     ballFlight.position = { x: 0, y: 0, z: 0 };
     ballFlight.velocity = { x: 0, y: 0, z: 0 };
     ballFlight.spin = { x: 0, y: 0, z: 0 };
+    ballFlight.initialSpin = { x: 0, y: 0, z: 0 };
     ballFlight.flying = false;
     ballFlight.startTime = 0;
     ballFlight.lastUpdateTime = 0;

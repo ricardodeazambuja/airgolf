@@ -741,7 +741,10 @@ if (teePos.visible) {
 const ballRadius = Math.max(8, settings.ballDiameter * teePos.scale * 0.3);
 
 // Draw hit zone (detection area)
-const hitZoneRadius = Math.max(30, settings.hitZoneDiameter * teePos.scale * 0.6);
+// Hit detection uses: hitZoneDiameter / 200 meters (diameter → radius, cm → m)
+// So visual should scale from meters: (diameter / 200) * scale
+const hitZoneRadiusMeters = settings.hitZoneDiameter / 200; // Convert cm diameter to m radius
+const hitZoneRadius = Math.max(10, hitZoneRadiusMeters * teePos.scale);
 ctx.fillStyle = 'rgba(255, 255, 0, 0.1)';
 ctx.strokeStyle = 'rgba(255, 255, 0, 0.5)';
 ctx.lineWidth = 2;
@@ -1019,7 +1022,7 @@ ctx.fillText(`${dist.toFixed(1)}m`, pos.x, pos.y - ballRadius - 5);
 // Spin curve indicator
 if (settings.spinEffect > 0 && ballFlight.spin) {
 const sidespin = ballFlight.spin.y;
-if (Math.abs(sidespin) > 20) {
+if (Math.abs(sidespin) > 1) {  // Lower threshold since spin decays during flight
 // Draw curve arrow
 const arrowY = pos.y + ballRadius + 15;
 ctx.strokeStyle = sidespin > 0 ? '#ff4444' : '#4444ff';
@@ -1151,7 +1154,9 @@ ctx.fillText(`${distText} • ${heightText} • ${speedText}`, centerX, 60);
 if (lastShot.spin) {
 const sidespin = lastShot.spin.y;
 ctx.font = '14px Arial';
-if (Math.abs(sidespin) > 50) {
+// Threshold: >2 rad/s for hook/slice (sidespinRate = -(vx / ballRadius) * 0.02)
+// For vx=5m/s, ballRadius=0.0215m: sidespin ~4.65 rad/s
+if (Math.abs(sidespin) > 2) {
 if (sidespin > 0) {
 ctx.fillStyle = '#ff6666';
 ctx.fillText('SLICE →', centerX, 85);

@@ -154,4 +154,29 @@ requestAnimationFrame(render);
 // Display initial status
 updateStatus('🏌️ Welcome! Hold your phone like a golf club, then tap "Tee Up"');
 
+// ============================================
+// iOS SHAKE-TO-UNDO FIX
+// ============================================
+// Prevent iOS shake-to-undo gesture from interfering with swing
+
+// Blur any focused input when game starts to prevent shake-to-undo
+document.addEventListener('focusin', (e) => {
+    // Allow focus in settings modal
+    if (!elements.settingsModal.classList.contains('active')) {
+        setTimeout(() => e.target.blur(), 100);
+    }
+});
+
+// Prevent gesture events that might trigger iOS controls
+document.addEventListener('gesturestart', (e) => {
+    e.preventDefault();
+});
+
+// Additional fix: ensure no input is focused when swinging
+canvas.addEventListener('touchstart', () => {
+    if (document.activeElement) {
+        document.activeElement.blur();
+    }
+});
+
 console.log('Air Golf initialized successfully!');

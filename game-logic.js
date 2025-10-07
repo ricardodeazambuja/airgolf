@@ -406,6 +406,7 @@ function launchBall(initialVelocity) {
     if (ballRadius <= 0 || !isFinite(vx) || !isFinite(vy) || !isFinite(vz)) {
         addDebugMessage(`⚠️ Invalid velocity or ball size, skipping spin`);
         ballFlight.spin = { x: 0, y: 0, z: 0 };
+        ballFlight.initialSpin = { x: 0, y: 0, z: 0 };
     } else {
         const sidespinRate = -(vx / ballRadius) * 0.02;
         const backspinRate = (vy / ballRadius) * 0.05;
@@ -416,12 +417,19 @@ function launchBall(initialVelocity) {
             y: isFinite(sidespinRate) ? sidespinRate : 0,
             z: isFinite(riflespinRate) ? riflespinRate : 0
         };
+
+        // Store initial spin before decay
+        ballFlight.initialSpin = { ...ballFlight.spin };
     }
 
     const spinMagnitude = Math.sqrt(ballFlight.spin.x ** 2 + ballFlight.spin.y ** 2);
 
-    if (currentSettings.spinEffect > 0 && spinMagnitude > 5) {
-        addDebugMessage(`🌀 Spin: ${spinMagnitude.toFixed(0)} rad/s`);
+    if (currentSettings.spinEffect > 0 && spinMagnitude > 0.5) {
+        const sidespin = ballFlight.spin.y;
+        const spinType = Math.abs(sidespin) > 2
+            ? (sidespin > 0 ? 'SLICE' : 'HOOK')
+            : 'STRAIGHT';
+        addDebugMessage(`🌀 Spin: ${spinMagnitude.toFixed(1)} rad/s (Y:${sidespin.toFixed(1)}) ${spinType}`);
 
         if (Math.abs(ballFlight.spin.y) > 50) {
             const direction = ballFlight.spin.y < 0 ? 'SLICE→' : '←HOOK';
