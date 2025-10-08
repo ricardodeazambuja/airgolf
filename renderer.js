@@ -2,7 +2,7 @@
 // RENDERER MODULE - COMPLETE IMPLEMENTATION
 // ============================================
 
-import { GameState, groundLinePercent, camera } from './config.js';
+import { GameState, groundLinePercent, camera, getCameraForAspectRatio } from './config.js';
 import { project3DToScreen, debugLog, addDebugMessage } from './utils.js';
 import { clubTipTracking } from './tracking.js';
 import { ballFlight } from './physics.js';
@@ -229,7 +229,13 @@ function calculateDynamicCamera() {
 
 // Project 3D to 2D using dynamic camera when active
 function projectWithCamera(worldX, worldY, worldZ) {
-    const cam = dynamicCamera.active ? dynamicCamera : camera;
+    // Get responsive camera settings based on screen aspect ratio
+    const responsiveCamera = getCameraForAspectRatio(canvas.width, canvas.height);
+
+    const cam = dynamicCamera.active ? dynamicCamera : {
+        distance: responsiveCamera.distance,
+        height: responsiveCamera.height
+    };
 
     const cameraZ = -cam.distance;
     const cameraY = cam.height;
@@ -244,7 +250,7 @@ function projectWithCamera(worldX, worldY, worldZ) {
 
     const perspective = 250 / relZ;
     const screenX = canvas.width / 2 + relX * perspective;
-    const groundLine = canvas.height * groundLinePercent;
+    const groundLine = canvas.height * responsiveCamera.groundLinePercent;
     const screenY = groundLine - relY * perspective;
 
     const visible = screenX >= -50 && screenX <= canvas.width + 50 &&
@@ -732,7 +738,8 @@ ctx.fillText(axis.label, centerX + end.x, centerY + end.y - 5);
 
 export function drawGround() {
 // Draw perspective fairway looking down the course
-const groundLine = canvas.height * groundLinePercent;
+const responsiveCamera = getCameraForAspectRatio(canvas.width, canvas.height);
+const groundLine = canvas.height * responsiveCamera.groundLinePercent;
 
 // Sky
 const gradient = ctx.createLinearGradient(0, 0, 0, groundLine);
@@ -752,8 +759,8 @@ ctx.lineWidth = 1;
 // Horizontal lines (distance markers) - draw from near to far
 for (let z = 0; z <= 100; z += 10) {
 // Left and right edges of fairway
-const leftPos = projectWithCamera(-5, 0, z);
-const rightPos = projectWithCamera(5, 0, z);
+const leftPos = project3DToScreen(-5, 0, z, canvas);
+const rightPos = project3DToScreen(5, 0, z, canvas);
 
 if (leftPos.visible && rightPos.visible) {
 ctx.beginPath();
@@ -768,8 +775,8 @@ ctx.strokeStyle = 'rgba(0, 100, 0, 0.5)';
 ctx.lineWidth = 2;
 
 // Left edge
-const nearLeft = projectWithCamera(-5, 0, 0);
-const farLeft = projectWithCamera(-5, 0, 100);
+const nearLeft = project3DToScreen(-5, 0, 0, canvas);
+const farLeft = project3DToScreen(-5, 0, 100, canvas);
 if (nearLeft.visible || farLeft.visible) {
 ctx.beginPath();
 ctx.moveTo(nearLeft.x, nearLeft.y);
@@ -778,8 +785,8 @@ ctx.stroke();
 }
 
 // Right edge
-const nearRight = projectWithCamera(5, 0, 0);
-const farRight = projectWithCamera(5, 0, 100);
+const nearRight = project3DToScreen(5, 0, 0, canvas);
+const farRight = project3DToScreen(5, 0, 100, canvas);
 if (nearRight.visible || farRight.visible) {
 ctx.beginPath();
 ctx.moveTo(nearRight.x, nearRight.y);
@@ -791,8 +798,8 @@ ctx.stroke();
 ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
 ctx.lineWidth = 1;
 ctx.setLineDash([5, 5]);
-const nearCenter = projectWithCamera(0, 0, 0);
-const farCenter = projectWithCamera(0, 0, 100);
+const nearCenter = project3DToScreen(0, 0, 0, canvas);
+const farCenter = project3DToScreen(0, 0, 100, canvas);
 if (nearCenter.visible || farCenter.visible) {
 ctx.beginPath();
 ctx.moveTo(nearCenter.x, nearCenter.y);

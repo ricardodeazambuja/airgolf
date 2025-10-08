@@ -132,10 +132,10 @@ setRenderState({
 setRenderCallbacks({
     checkSwingTimeout: checkSwingTimeout,  // Use game-logic.js function (handles timeout properly)
     updateBallPhysics: (deltaTime) => updateBallPhysics(
-        deltaTime, 
-        settings, 
-        swingData, 
-        swingRecorder, 
+        deltaTime,
+        settings,
+        swingData,
+        swingRecorder,
         lastShot,
         () => saveToLocalStorage(settings, lastShot),
         updateStatus,
@@ -145,9 +145,6 @@ setRenderCallbacks({
 
 // Start render loop
 requestAnimationFrame(render);
-
-// Display initial status
-updateStatus('🏌️ Welcome! Hold your phone like a golf club, then tap "Tee Up"');
 
 // ============================================
 // iOS SHAKE-TO-UNDO FIX

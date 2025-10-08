@@ -15,7 +15,7 @@ export const GameState = {
 
 // Default game settings
 export const defaultSettings = {
-    phoneOrientation: 'edge',   // 'screen' or 'edge' - which side is the club face
+    phoneOrientation: 'screen',   // 'screen' or 'edge' - which side is the club face
     clubLength: 1.2,        // meters
     clubWeight: 200,        // grams
     ballDiameter: 4.3,      // cm (regulation golf ball)
@@ -40,10 +40,41 @@ export const defaultSettings = {
 // Y-axis: Down (-) to Up (+)
 // Z-axis: Camera (-) to Fairway (+) - ball flies in +Z direction
 export const camera = {
-    distance: 4.0,  // meters behind tee (farther for better view)
-    height: 2.0,    // meters above ground (higher for better angle)
+    distance: 4.0,  // Base distance - will be adjusted for aspect ratio
+    height: 2.0,    // Base height - will be adjusted for aspect ratio
     fov: 60         // field of view in degrees
 };
 
+// Dynamic camera adjustment based on screen aspect ratio
+export function getCameraForAspectRatio(width, height) {
+    // Use window size, not canvas size, to detect portrait vs landscape
+    const screenAspectRatio = window.innerWidth / window.innerHeight;
+    const aspectRatio = screenAspectRatio;
+
+    if (aspectRatio < 0.75) {
+        // Portrait mobile (tall screen) - Balanced for visibility
+        return {
+            distance: camera.distance * 0.65,  // Moderate distance (2.6m)
+            height: camera.height * 0.35,      // Lower camera (0.7m)
+            groundLinePercent: 0.30            // Ground at 30% down screen (more space at top)
+        };
+    } else if (aspectRatio < 1.0) {
+        // Portrait tablet
+        return {
+            distance: camera.distance * 0.75,
+            height: camera.height * 0.5,
+            groundLinePercent: 0.50
+        };
+    } else {
+        // Landscape / Desktop
+        return {
+            distance: camera.distance,
+            height: camera.height,
+            groundLinePercent: 0.70
+        };
+    }
+}
+
 // Ground rendering position (percentage down the screen)
-export const groundLinePercent = 0.70; // Ground at 70% down screen
+// This will be overridden by getCameraForAspectRatio()
+export const groundLinePercent = 0.60;

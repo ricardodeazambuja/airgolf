@@ -16,15 +16,13 @@
         <canvas id="canvas"></canvas>
         <div id="controls">
             <button id="setBallBtn">⛳ Tee Up</button>
-            <div style="display: flex; gap: 10px; justify-content: center;">
-                <button id="recordBtn">🎥 Record Swing</button>
-                <button id="replayBtn" disabled>▶️ Replay</button>
-            </div>
-            <div style="display: flex; gap: 10px; justify-content: center;">
-                <button id="settingsBtn">Settings</button>
+            <div style="display: flex; gap: 6px; justify-content: center;">
+                <button id="recordBtn">🎥 Rec</button>
+                <button id="replayBtn" disabled>▶️ Play</button>
+                <button id="settingsBtn">⚙️</button>
                 <button id="resetBtn" disabled>Reset</button>
             </div>
-            <div id="status">🏌️ Welcome! Hold your phone like a golf club, then tap "Tee Up"</div>
+            <div id="status"></div>
             <div style="text-align: center; margin-top: 5px;">
                 <a href="https://github.com/ricardodeazambuja/airgolf#readme" target="_blank" style="color: #888; font-size: 12px; text-decoration: none;">
                     📖 Help & Troubleshooting
@@ -60,7 +58,7 @@
                 <div class="setting-item">
                     <label>Swing Style</label>
                     <select id="phoneOrientation">
-                        <option value="edge">🏌️ Edge First (Like Real Club)</option>
+                        <!-- <option value="edge">🏌️ Edge First (Like Real Club)</option> -->
                         <option value="screen">📱 Screen First (Flat Swing)</option>
                     </select>
                     <div style="font-size: 11px; color: #aaa; margin-top: 3px;">

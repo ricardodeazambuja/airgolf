@@ -380,11 +380,11 @@ function calculateImpactVelocity() {
         const tempY = vy;
         const tempZ = vz;
 
-        vx = tempY;   // Phone Y → Screen X
-        vy = -tempZ;  // Phone Z → Screen Y (inverted)
-        vz = tempX;   // Phone X → Screen Z
+        vx = tempY;   // Phone Y → Screen X (rotated)
+        vy = tempX;   // Phone X → Screen Y
+        vz = tempZ;   // Phone Z stays Z (forward/back)
 
-        addDebugMessage(`📱 Edge: PhoneX→ScreenZ, PhoneY→ScreenX, PhoneZ→ScreenY`);
+        addDebugMessage(`📱 Edge: 90° rotation applied`);
     }
 
     addDebugMessage(`Screen vel: x:${vx.toFixed(2)} y:${vy.toFixed(2)} z:${vz.toFixed(2)} m/s`);

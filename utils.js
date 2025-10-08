@@ -3,7 +3,7 @@
 // ============================================
 // Helper functions for 3D projection, debugging, and math utilities
 
-import { camera, groundLinePercent } from './config.js';
+import { camera, groundLinePercent, getCameraForAspectRatio } from './config.js';
 
 // ============================================
 // 3D PROJECTION
@@ -14,8 +14,11 @@ export function project3DToScreen(worldX, worldY, worldZ, canvas) {
     // Camera is behind the ball, looking forward (+Z direction)
     // worldZ increases as ball flies away
 
-    const cameraZ = -camera.distance; // Camera is behind (0,0,0)
-    const cameraY = camera.height;
+    // Get responsive camera settings based on screen aspect ratio
+    const responsiveCamera = getCameraForAspectRatio(canvas.width, canvas.height);
+
+    const cameraZ = -responsiveCamera.distance; // Camera is behind (0,0,0)
+    const cameraY = responsiveCamera.height;
 
     // Relative to camera
     const relX = worldX;
@@ -32,8 +35,8 @@ export function project3DToScreen(worldX, worldY, worldZ, canvas) {
 
     const screenX = canvas.width / 2 + relX * perspective;
 
-    // Ground is at groundLinePercent down the screen
-    const groundLine = canvas.height * groundLinePercent;
+    // Ground is at groundLinePercent down the screen (responsive)
+    const groundLine = canvas.height * responsiveCamera.groundLinePercent;
     const screenY = groundLine - relY * perspective;
 
     // Check if visible on screen

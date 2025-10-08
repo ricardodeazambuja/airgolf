@@ -153,7 +153,8 @@ function handleDeviceMotion(event) {
     const now = Date.now();
     if (!handleDeviceMotion._lastPeriodicLog || now - handleDeviceMotion._lastPeriodicLog > 2000) {
         handleDeviceMotion._lastPeriodicLog = now;
-        if (currentState === GameState.BALL_SET_READY_TO_SWING || currentState === GameState.SWINGING) {
+        if (currentState === GameState.BALL_SET_READY_TO_SWING ||
+            currentState === GameState.SWINGING) {
             const isSwinging = currentState === GameState.SWINGING;
             addDebugMessage(`💓 state:${currentState} cb:${recordSwingMotionCallback ? 'OK' : 'NULL'} match:${isSwinging}`);
         }
@@ -176,12 +177,7 @@ function handleDeviceMotion(event) {
         }
     }
 
-    // Debug: Prove we reach this line EVERY time
-    const now2 = Date.now();
-    if (!handleDeviceMotion._lastReachLog || now2 - handleDeviceMotion._lastReachLog > 2000) {
-        handleDeviceMotion._lastReachLog = now2;
-        addDebugMessage(`✓ After tracking, state=${currentState}`);
-    }
+    // Removed: "After tracking" debug spam
 
     // If we're in swinging state, record the motion
     if (currentState === GameState.SWINGING) {
@@ -249,6 +245,5 @@ export function resetSensorDebugFlags() {
     handleDeviceMotion._failureLogged = false;
     handleDeviceMotion._reachedSwingCheck = false;
     handleDeviceMotion._trackingCompleted = false;
-    handleDeviceMotion._lastReachLog = 0;
     addDebugMessage('🔄 Sensor debug flags reset');
 }

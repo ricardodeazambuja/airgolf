@@ -166,15 +166,15 @@ function calculateClubTipPosition(settings) {
 
     // Apply phone orientation transformation
     if (settings.phoneOrientation === 'edge') {
-        // Edge-first: Same rotation as velocity
-        // Phone X → Screen Z, Phone Y → Screen X, Phone Z → Screen Y
+        // Edge-first: Rotate 90° around Z axis
+        // When holding phone edge-first (landscape), rotate coords
         const tempX = tipX;
         const tempY = tipY;
         const tempZ = tipZ;
 
-        tipX = tempY;   // Phone Y → Screen X
-        tipY = -tempZ;  // Phone Z → Screen Y (inverted)
-        tipZ = tempX;   // Phone X → Screen Z
+        tipX = tempY;   // Phone Y → Screen X (rotated)
+        tipY = tempX;   // Phone X → Screen Y
+        tipZ = tempZ;   // Phone Z stays Z (forward/back)
     }
     // For 'screen' orientation, no transformation needed (original behavior)
 
@@ -275,16 +275,6 @@ export function updateClubTipTracking(imuData, settings, ballPosition, swingReco
     clubTipTracking.history = clubTipTracking.history.filter(
         h => h.timestamp > twoSecondsAgo
     );
-
-    // Debug: Show tip position every 30 frames when ball is set (about every 0.5 sec)
-    if (ballPosition.set && clubTipTracking.history.length % 30 === 0) {
-        const tipDist = Math.sqrt(
-            clubTipTracking.tipPosition.x ** 2 +
-            clubTipTracking.tipPosition.y ** 2 +
-            clubTipTracking.tipPosition.z ** 2
-        );
-        addDebugMessage(`Tip: [${clubTipTracking.tipPosition.x.toFixed(2)}, ${clubTipTracking.tipPosition.y.toFixed(2)}, ${clubTipTracking.tipPosition.z.toFixed(2)}] d:${tipDist.toFixed(2)}m`);
-    }
 }
 
 // ============================================
