@@ -52,8 +52,7 @@ Turn your phone into a golf club. Uses IMU sensors to track swing motion and sim
 ### Phone Grip
 
 **Swing Style**
-- **Edge First**: Hold phone edge like a club shaft (recommended)
-- **Screen First**: Swing with screen facing forward (alternative)
+- **Screen First**: Swing with screen facing forward
 
 ### Golf Ball
 
@@ -71,10 +70,6 @@ Turn your phone into a golf club. Uses IMU sensors to track swing motion and sim
 - Larger = easier to hit (forgiving)
 
 ### Hit Detection
-
-**~~Position Sensitivity~~** (deprecated)
-- This setting is not used
-- Hit zone diameter controls detection area
 
 **Minimum Swing Speed** (1-15 m/s², default: 5.0)
 - Acceleration threshold to register hit
