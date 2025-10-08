@@ -7,9 +7,10 @@ import { defaultSettings } from './config.js';
 import { loadFromLocalStorage, saveToLocalStorage } from './storage.js';
 import { initRenderer, render, setRenderState, setRenderCallbacks } from './renderer.js';
 import { initUI, updateStatus } from './ui.js';
-import {  
-    getCurrentState, 
-    setCurrentState, 
+import { addDebugMessage } from './utils.js';
+import {
+    getCurrentState,
+    setCurrentState,
     setBallPosition,
     ballPosition,
     swingData,
@@ -19,7 +20,8 @@ import {
     resetGame,
     setGameSettings,
     setUICallbacks,
-    recordSwingMotion
+    recordSwingMotion,
+    checkSwingTimeout
 } from './game-logic.js';
 import { requestIMUPermission, setSensorCallbacks, imuData, imuPermissionGranted as getIMUPermissionGranted } from './sensors.js';
 import { updateClubTipTracking } from './tracking.js';
@@ -128,14 +130,7 @@ setRenderState({
 
 // Set render callbacks
 setRenderCallbacks({
-    checkSwingTimeout: () => {
-        if (swingTimer.expired) return;
-        const elapsed = (Date.now() - swingTimer.startTime) / 1000;
-        swingTimer.timeRemaining = Math.max(0, settings.swingTimeout - elapsed);
-        if (swingTimer.timeRemaining <= 0) {
-            swingTimer.expired = true;
-        }
-    },
+    checkSwingTimeout: checkSwingTimeout,  // Use game-logic.js function (handles timeout properly)
     updateBallPhysics: (deltaTime) => updateBallPhysics(
         deltaTime, 
         settings, 
@@ -179,4 +174,4 @@ canvas.addEventListener('touchstart', () => {
     }
 });
 
-console.log('Air Golf initialized successfully!');
+addDebugMessage('✅ Air Golf initialized successfully!');

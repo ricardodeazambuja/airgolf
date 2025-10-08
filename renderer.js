@@ -32,9 +32,108 @@ let dynamicCamera = {
     active: false  // When true, use dynamic values instead of config
 };
 
+// Debug log scroll state
+let debugScroll = {
+    offset: 0,  // Number of lines scrolled up from bottom
+    touching: false,
+    startY: 0,
+    startOffset: 0
+};
+
 export function initRenderer(canvasElement) {
     canvas = canvasElement;
     ctx = canvas.getContext('2d');
+
+    // Set up debug log scroll controls
+    setupDebugScrollControls();
+}
+
+// ============================================
+// DEBUG LOG SCROLL CONTROLS
+// ============================================
+
+function setupDebugScrollControls() {
+    // Touch/mouse events for scrolling debug log
+    canvas.addEventListener('touchstart', handleDebugTouchStart, { passive: false });
+    canvas.addEventListener('touchmove', handleDebugTouchMove, { passive: false });
+    canvas.addEventListener('touchend', handleDebugTouchEnd);
+
+    // Mouse events for desktop
+    canvas.addEventListener('mousedown', handleDebugMouseDown);
+    canvas.addEventListener('mousemove', handleDebugMouseMove);
+    canvas.addEventListener('mouseup', handleDebugMouseUp);
+}
+
+function isInDebugArea(x, y) {
+    if (!settings || !settings.showDebug) return false;
+    const debugX = 10;
+    const debugY = 10;
+    const debugWidth = Math.min(canvas.width - 20, 400);
+    const debugHeight = 250;
+    return x >= debugX - 5 && x <= debugX + debugWidth + 5 &&
+           y >= debugY - 5 && y <= debugY + debugHeight + 5;
+}
+
+function handleDebugTouchStart(e) {
+    const touch = e.touches[0];
+    const rect = canvas.getBoundingClientRect();
+    const x = touch.clientX - rect.left;
+    const y = touch.clientY - rect.top;
+
+    if (isInDebugArea(x, y)) {
+        e.preventDefault(); // Prevent canvas drag/replay exit
+        debugScroll.touching = true;
+        debugScroll.startY = y;
+        debugScroll.startOffset = debugScroll.offset;
+    }
+}
+
+function handleDebugTouchMove(e) {
+    if (!debugScroll.touching) return;
+
+    e.preventDefault();
+    const touch = e.touches[0];
+    const rect = canvas.getBoundingClientRect();
+    const y = touch.clientY - rect.top;
+
+    const deltaY = debugScroll.startY - y; // Positive = scroll up, negative = scroll down
+    const lineHeight = 14;
+    const scrollLines = Math.floor(deltaY / lineHeight);
+
+    debugScroll.offset = Math.max(0, debugScroll.startOffset + scrollLines);
+}
+
+function handleDebugTouchEnd(e) {
+    debugScroll.touching = false;
+}
+
+function handleDebugMouseDown(e) {
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    if (isInDebugArea(x, y)) {
+        debugScroll.touching = true;
+        debugScroll.startY = y;
+        debugScroll.startOffset = debugScroll.offset;
+    }
+}
+
+function handleDebugMouseMove(e) {
+    if (!debugScroll.touching) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const y = e.clientY - rect.top;
+
+    const deltaY = debugScroll.startY - y;
+    const lineHeight = 14;
+    const scrollLines = Math.floor(deltaY / lineHeight);
+
+    debugScroll.offset = Math.max(0, debugScroll.startOffset + scrollLines);
+}
+
+function handleDebugMouseUp(e) {
+    debugScroll.touching = false;
 }
 
 export function setRenderState(state) {
@@ -183,6 +282,11 @@ break;
 case GameState.SWINGING:
 drawClubPosition();
 drawSwingTrail();
+drawCountdownTimer(); // Keep showing timer during swing
+// CRITICAL: Check timeout in SWINGING state too!
+if (ballPosition.set) {
+    checkSwingTimeoutCallback();
+}
 break;
 
 case GameState.BALL_FLYING:
@@ -703,8 +807,8 @@ export function drawClubPosition() {
 const x = canvas.width / 2;
 const y = canvas.height / 2;
 
-// If no IMU permission yet, show instruction
-if (!imuPermissionGranted) {
+// Show welcome screen initially OR after reset
+if (!imuPermissionGranted || (!ballPosition.set && gameState() === GameState.READY_TO_SET_BALL)) {
 ctx.fillStyle = 'white';
 ctx.font = 'bold 28px Arial';
 ctx.textAlign = 'center';
@@ -849,7 +953,10 @@ ctx.fillText('READY - Swing!', centerX, centerY - 30);
 ctx.fillStyle = 'white';
 ctx.font = '18px Arial';
 ctx.textAlign = 'center';
-ctx.fillText(`α:${imuData.orientation.alpha.toFixed(0)}°`, x, y);
+const alphaText = imuData.orientation.alpha !== null && imuData.orientation.alpha !== undefined
+    ? `α:${imuData.orientation.alpha.toFixed(0)}°`
+    : 'α:N/A';
+ctx.fillText(alphaText, x, y);
 ctx.fillText(`β:${imuData.orientation.beta.toFixed(0)}°`, x, y + 25);
 ctx.fillText(`γ:${imuData.orientation.gamma.toFixed(0)}°`, x, y + 50);
 }
@@ -1184,6 +1291,21 @@ const debugHeight = 250; // Fixed height
 ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
 ctx.fillRect(debugX - 5, debugY - 5, debugWidth + 10, debugHeight + 10);
 
+// Border (green if touching/scrolling, yellow if scrollable, dim if not)
+const totalMessages = debugLog.messages.length;
+const maxLines = Math.floor((debugHeight - 118) / 14);
+if (debugScroll.touching) {
+    ctx.strokeStyle = '#00ff00';  // Green when actively scrolling
+    ctx.lineWidth = 3;
+} else if (totalMessages > maxLines) {
+    ctx.strokeStyle = '#ffff00';  // Yellow when scrollable
+    ctx.lineWidth = 2;
+} else {
+    ctx.strokeStyle = '#444444';  // Dim when not scrollable
+    ctx.lineWidth = 1;
+}
+ctx.strokeRect(debugX - 5, debugY - 5, debugWidth + 10, debugHeight + 10);
+
 // Title
 ctx.fillStyle = '#00ff00';
 ctx.font = 'bold 14px monospace';
@@ -1219,10 +1341,19 @@ const lineHeight = 14;
 
 // Reserve space for coordinate legend at bottom (55px)
 const availableHeight = debugHeight - 118; // 63 for top + HUD, 55 for bottom
-const maxLines = Math.floor(availableHeight / lineHeight);
+// Note: totalMessages and maxLines already calculated above for border
 
-// Show last N messages that fit (most recent at bottom)
-const visibleMessages = debugLog.messages.slice(-maxLines);
+// Apply scroll offset (0 = show latest, higher = scroll back in history)
+const endIndex = totalMessages - debugScroll.offset;
+const startIndex = Math.max(0, endIndex - maxLines);
+
+// Auto-reset scroll when at bottom and new messages arrive
+if (debugScroll.offset > 0 && endIndex >= totalMessages) {
+    debugScroll.offset = 0;
+}
+
+// Show messages with scroll offset applied
+const visibleMessages = debugLog.messages.slice(startIndex, endIndex);
 visibleMessages.forEach(msg => {
 ctx.fillText(msg, debugX, lineY);
 lineY += lineHeight;
@@ -1231,6 +1362,14 @@ lineY += lineHeight;
 // If no messages yet, show IMU data
 if (debugLog.messages.length === 0 && imuPermissionGranted) {
 ctx.fillText('Waiting for events...', debugX, lineY);
+}
+
+// Scroll indicator
+if (totalMessages > maxLines) {
+    ctx.fillStyle = '#888';
+    ctx.font = '10px monospace';
+    const scrollInfo = `↕️ Msg ${startIndex + 1}-${endIndex} of ${totalMessages} (swipe to scroll)`;
+    ctx.fillText(scrollInfo, debugX + debugWidth - 230, debugY + 15);
 }
 
 // Draw coordinate system indicator (bottom of debug box)

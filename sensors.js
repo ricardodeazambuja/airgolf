@@ -5,6 +5,7 @@
 // Feeds data to tracking.js for position estimation
 
 import { GameState } from './config.js';
+import { addDebugMessage } from './utils.js';
 
 // ============================================
 // IMU DATA STORAGE
@@ -99,12 +100,33 @@ function initializeIMU() {
 // Collect and store raw IMU data from device sensors
 function handleDeviceMotion(event) {
     // Store acceleration and rotation rate
-    if (event.acceleration) {
+    // iOS note: event.acceleration may be null, use accelerationIncludingGravity as fallback
+    if (event.acceleration && (event.acceleration.x !== null || event.acceleration.y !== null || event.acceleration.z !== null)) {
         imuData.acceleration = {
             x: event.acceleration.x || 0,
             y: event.acceleration.y || 0,
             z: event.acceleration.z || 0
         };
+
+        // Debug: log once that we're using linear acceleration
+        if (!handleDeviceMotion._accelSourceLogged) {
+            handleDeviceMotion._accelSourceLogged = true;
+            addDebugMessage('📱 Using linear acceleration (without gravity)');
+        }
+    } else if (event.accelerationIncludingGravity) {
+        // Fallback: use total acceleration (including gravity)
+        // This is less accurate but better than nothing
+        imuData.acceleration = {
+            x: event.accelerationIncludingGravity.x || 0,
+            y: event.accelerationIncludingGravity.y || 0,
+            z: event.accelerationIncludingGravity.z || 0
+        };
+
+        // Debug: log once that we're using gravity-inclusive data
+        if (!handleDeviceMotion._accelSourceLogged) {
+            handleDeviceMotion._accelSourceLogged = true;
+            addDebugMessage('⚠️ Using accelerationIncludingGravity (includes ~9.8m/s² gravity)');
+        }
     }
 
     if (event.rotationRate) {
@@ -120,18 +142,75 @@ function handleDeviceMotion(event) {
     // Get current state
     const currentState = getCurrentStateCallback ? getCurrentStateCallback() : null;
 
+    // Debug: Heartbeat to confirm handleDeviceMotion is running (log once after ball set)
+    if (!handleDeviceMotion._heartbeatLogged &&
+        (currentState === GameState.BALL_SET_READY_TO_SWING || currentState === GameState.SWINGING)) {
+        handleDeviceMotion._heartbeatLogged = true;
+        addDebugMessage(`💓 [SENSORS] Heartbeat OK - current state: ${currentState}`);
+    }
+
+    // Debug: Periodic heartbeat every 2 seconds to verify continuous operation
+    const now = Date.now();
+    if (!handleDeviceMotion._lastPeriodicLog || now - handleDeviceMotion._lastPeriodicLog > 2000) {
+        handleDeviceMotion._lastPeriodicLog = now;
+        if (currentState === GameState.BALL_SET_READY_TO_SWING || currentState === GameState.SWINGING) {
+            const isSwinging = currentState === GameState.SWINGING;
+            addDebugMessage(`💓 state:${currentState} cb:${recordSwingMotionCallback ? 'OK' : 'NULL'} match:${isSwinging}`);
+        }
+    }
+
     // Update club tip tracking if ball is set or swinging
     if (currentState === GameState.BALL_SET_READY_TO_SWING ||
         currentState === GameState.SWINGING) {
         if (updateClubTipTrackingCallback) {
-            updateClubTipTrackingCallback();
+            try {
+                updateClubTipTrackingCallback();
+                // Debug: Log after tracking update completes
+                if (!handleDeviceMotion._trackingCompleted) {
+                    handleDeviceMotion._trackingCompleted = true;
+                    addDebugMessage(`✓ Tracking callback completed`);
+                }
+            } catch (error) {
+                addDebugMessage(`❌ ERROR in tracking: ${error.message}`);
+            }
         }
+    }
+
+    // Debug: Prove we reach this line EVERY time
+    const now2 = Date.now();
+    if (!handleDeviceMotion._lastReachLog || now2 - handleDeviceMotion._lastReachLog > 2000) {
+        handleDeviceMotion._lastReachLog = now2;
+        addDebugMessage(`✓ After tracking, state=${currentState}`);
     }
 
     // If we're in swinging state, record the motion
     if (currentState === GameState.SWINGING) {
+        // Debug: log once when swing recording starts in sensors
+        if (!handleDeviceMotion._swingingLogged) {
+            handleDeviceMotion._swingingLogged = true;
+            addDebugMessage(`🔄 INSIDE IF BLOCK - calling callback`);
+        }
         if (recordSwingMotionCallback) {
             recordSwingMotionCallback();
+        } else {
+            // Debug: callback not set!
+            if (!handleDeviceMotion._callbackMissing) {
+                handleDeviceMotion._callbackMissing = true;
+                addDebugMessage(`❌ ERROR: callback is null!`);
+            }
+        }
+    } else {
+        // Debug: log what state we're in if not swinging
+        if (handleDeviceMotion._swingingLogged && !handleDeviceMotion._notSwingingLogged) {
+            handleDeviceMotion._notSwingingLogged = true;
+            addDebugMessage(`🔄 [SENSORS] State changed from SWINGING to ${currentState}`);
+        }
+
+        // Debug: Why is the check failing?
+        if (!handleDeviceMotion._failureLogged &&
+            (currentState === GameState.BALL_SET_READY_TO_SWING || currentState === 'swinging')) {
+            handleDeviceMotion._failureLogged = true;
+            addDebugMessage(`❌ [DEBUG] State check FAILED: current="${currentState}", expected="${GameState.SWINGING}"`);
         }
     }
 }
@@ -141,10 +220,12 @@ function handleDeviceMotion(event) {
 // ============================================
 function handleDeviceOrientation(event) {
     // Store device orientation
+    // IMPORTANT: Keep null/undefined for alpha when compass unavailable
+    // Using || 0 would make "no compass" indistinguishable from "pointing North"
     imuData.orientation = {
-        alpha: event.alpha || 0,  // Rotation around z-axis (0-360)
-        beta: event.beta || 0,    // Rotation around x-axis (-180 to 180)
-        gamma: event.gamma || 0   // Rotation around y-axis (-90 to 90)
+        alpha: event.alpha,  // Rotation around z-axis (0-360), null if no compass
+        beta: event.beta ?? 0,    // Rotation around x-axis (-180 to 180)
+        gamma: event.gamma ?? 0   // Rotation around y-axis (-90 to 90)
     };
 }
 
@@ -153,4 +234,21 @@ function handleDeviceOrientation(event) {
 // ============================================
 export function setIMUPermissionGranted(value) {
     imuPermissionGranted = value;
+}
+
+// ============================================
+// RESET DEBUG FLAGS (called from game reset)
+// ============================================
+export function resetSensorDebugFlags() {
+    handleDeviceMotion._accelSourceLogged = false;
+    handleDeviceMotion._swingingLogged = false;
+    handleDeviceMotion._notSwingingLogged = false;
+    handleDeviceMotion._heartbeatLogged = false;
+    handleDeviceMotion._callbackMissing = false;
+    handleDeviceMotion._lastPeriodicLog = 0;
+    handleDeviceMotion._failureLogged = false;
+    handleDeviceMotion._reachedSwingCheck = false;
+    handleDeviceMotion._trackingCompleted = false;
+    handleDeviceMotion._lastReachLog = 0;
+    addDebugMessage('🔄 Sensor debug flags reset');
 }

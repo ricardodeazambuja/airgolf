@@ -185,9 +185,11 @@ Requires HTTPS for motion sensors to work.
 python https_server.py
 ```
 
-Then open: `https://localhost:4443`
+Then open: `https://localhost:8443` (or your server IP on local network)
 
 Accept the self-signed certificate warning.
+
+**Note**: The server includes cache-prevention headers to avoid iOS Safari caching issues during development. If you update code and don't see changes, restart the server and force-refresh the page.
 
 ### Manual Setup
 ```bash

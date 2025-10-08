@@ -30,7 +30,10 @@ export const clubTipTracking = {
     beta: 0.1,  // Filter gain (higher = more responsive, more noise)
 
     // Last update timestamp
-    lastUpdateTime: 0
+    lastUpdateTime: 0,
+
+    // Frame counter for debug messages (doesn't get filtered like history)
+    frameCount: 0
 };
 
 // ============================================
@@ -69,6 +72,13 @@ function madgwickFilterUpdate(gx, gy, gz, ax, ay, az, dt, mx = 0, my = 0, mz = 0
     const q1q1 = q.x * q.x;
     const q2q2 = q.y * q.y;
     const q3q3 = q.z * q.z;
+    // Cross products needed for magnetometer (9DOF)
+    const q0q1 = q.w * q.x;
+    const q0q2 = q.w * q.y;
+    const q0q3 = q.w * q.z;
+    const q1q2 = q.x * q.y;
+    const q1q3 = q.x * q.z;
+    const q2q3 = q.y * q.z;
 
     // Gradient from accelerometer (6DOF - always computed)
     let s0 = _4q0 * q2q2 + _2q2 * ax + _4q0 * q1q1 - _2q1 * ay;
@@ -196,8 +206,11 @@ export function updateClubTipTracking(imuData, settings, ballPosition, swingReco
     // Skip if dt is too large (first frame or tab was inactive)
     if (dt > 0.1) return;
 
-    // Debug: Check compass availability (first 100 frames only)
-    if (clubTipTracking.history.length < 100 && clubTipTracking.history.length % 20 === 0) {
+    // Increment frame counter
+    clubTipTracking.frameCount++;
+
+    // Debug: Check compass availability (first 100 frames only, print every 20 frames)
+    if (clubTipTracking.frameCount <= 100 && clubTipTracking.frameCount % 20 === 0) {
         const compassHeading = imuData.orientation.alpha;
         if (compassHeading !== null && compassHeading !== undefined) {
             addDebugMessage(`🧭 9DOF mode: Compass ${compassHeading.toFixed(1)}° (yaw drift correction active)`);
@@ -284,4 +297,5 @@ export function resetTracking() {
     clubTipTracking.tipVelocity = { x: 0, y: 0, z: 0 };
     clubTipTracking.history = [];
     clubTipTracking.lastUpdateTime = 0;
+    clubTipTracking.frameCount = 0;
 }

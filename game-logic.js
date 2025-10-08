@@ -6,7 +6,7 @@
 import { GameState } from './config.js';
 import { addDebugMessage, debugLog } from './utils.js';
 import { clubTipTracking, resetTracking } from './tracking.js';
-import { imuData } from './sensors.js';
+import { imuData, resetSensorDebugFlags } from './sensors.js';
 import { ballFlight, resetBallFlight } from './physics.js';
 import { playHitSound, playAlarmSound } from './audio.js';
 
@@ -16,7 +16,12 @@ import { playHitSound, playAlarmSound } from './audio.js';
 export let currentState = GameState.READY_TO_SET_BALL;
 
 export function setCurrentState(state) {
+    const previousState = currentState;
     currentState = state;
+    // Log every state transition
+    if (previousState !== state) {
+        addDebugMessage(`🔄 STATE: ${previousState} → ${state}`);
+    }
 }
 
 export function getCurrentState() {
@@ -103,6 +108,8 @@ export function setBallPosition(settings, updateStatus, setBallBtn) {
     swingTimer.timeRemaining = settings.swingTimeout;
     swingTimer.expired = false;
 
+    addDebugMessage(`⏱️ Timer started: ${settings.swingTimeout}s timeout`);
+
     currentState = GameState.BALL_SET_READY_TO_SWING;
     setBallBtn.disabled = true;
     updateStatus('✓ Ball Set! Swing now!');
@@ -136,9 +143,14 @@ function startSwingDetection() {
     swingData.hitDetected = false;
 
     currentState = GameState.SWINGING;
+    addDebugMessage(`🎯 State changed to SWINGING - ready to detect hit`);
 }
 
 export function recordSwingMotion() {
+    // Debug: Call counter to prove this function is running
+    if (!recordSwingMotion._callCount) recordSwingMotion._callCount = 0;
+    recordSwingMotion._callCount++;
+
     // Store IMU data during swing
     swingData.recordedMotion.push({
         acceleration: { ...imuData.acceleration },
@@ -153,6 +165,24 @@ export function recordSwingMotion() {
         d => d.timestamp > twoSecondsAgo
     );
 
+    // Debug: confirm recordSwingMotion is being called (once at start)
+    if (!recordSwingMotion._hasLogged) {
+        recordSwingMotion._hasLogged = true;
+        const accel = imuData.acceleration;
+        const totalAccel = Math.sqrt(accel.x ** 2 + accel.y ** 2 + accel.z ** 2);
+        addDebugMessage(`✓ Swing recording started (state: SWINGING)`);
+        addDebugMessage(`📱 Initial accel: [${accel.x?.toFixed(1)}, ${accel.y?.toFixed(1)}, ${accel.z?.toFixed(1)}] = ${totalAccel.toFixed(1)} m/s²`);
+    }
+
+    // Debug: Log acceleration periodically to see if it changes (every 2 seconds)
+    const now = Date.now();
+    if (!recordSwingMotion._lastAccelLog || now - recordSwingMotion._lastAccelLog > 2000) {
+        recordSwingMotion._lastAccelLog = now;
+        const accel = imuData.acceleration;
+        const totalAccel = Math.sqrt(accel.x ** 2 + accel.y ** 2 + accel.z ** 2);
+        addDebugMessage(`📱 Accel [calls:${recordSwingMotion._callCount}]: [${accel.x?.toFixed(1)}, ${accel.y?.toFixed(1)}, ${accel.z?.toFixed(1)}] = ${totalAccel.toFixed(1)} m/s²`);
+    }
+
     // Check for timeout
     checkSwingTimeout();
 
@@ -162,11 +192,32 @@ export function recordSwingMotion() {
     }
 }
 
-function checkSwingTimeout() {
+export function checkSwingTimeout() {
+    // Debug: log if called but guards fail (once only)
+    if (!checkSwingTimeout._hasEverRun) {
+        checkSwingTimeout._hasEverRun = true;
+        addDebugMessage(`✓ checkSwingTimeout called for first time`);
+    }
+
     if (swingTimer.expired) return;
+    if (!currentSettings) {
+        if (!checkSwingTimeout._settingsNullWarned) {
+            checkSwingTimeout._settingsNullWarned = true;
+            addDebugMessage(`⚠️ checkSwingTimeout: currentSettings is null!`);
+        }
+        return;
+    }
+
+    // Debug: log timer state once per second
+    const now = Date.now();
+    if (!checkSwingTimeout._lastDebug || now - checkSwingTimeout._lastDebug > 1000) {
+        checkSwingTimeout._lastDebug = now;
+        const elapsed = (now - swingTimer.startTime) / 1000;
+        addDebugMessage(`⏱️ Timer: ${swingTimer.timeRemaining.toFixed(1)}s (timeout:${currentSettings.swingTimeout})`);
+    }
 
     const elapsed = (Date.now() - swingTimer.startTime) / 1000; // Convert to seconds
-    swingTimer.timeRemaining = Math.max(0, swingTimer.swingTimeout - elapsed);
+    swingTimer.timeRemaining = Math.max(0, currentSettings.swingTimeout - elapsed);
 
     if (swingTimer.timeRemaining <= 0) {
         swingTimer.expired = true;
@@ -199,6 +250,7 @@ function handleSwingTimeout() {
 // ============================================
 function detectBallHit() {
     if (swingData.hitDetected) return;
+    if (!currentSettings) return; // Safety check: settings not loaded yet
 
     // Calculate distance of club tip from ball (which is at origin 0,0,0)
     const tipDistance = Math.sqrt(
@@ -217,9 +269,13 @@ function detectBallHit() {
         imuData.acceleration.z ** 2
     );
 
-    // Debug: log when close to hit zone
+    // Debug: log when close to hit zone (throttled to once per second)
+    const now = Date.now();
     if (tipDistance < hitThreshold * 1.5) {
-        addDebugMessage(`Near! dist:${tipDistance.toFixed(3)}m thresh:${hitThreshold.toFixed(3)}m accel:${totalAcceleration.toFixed(1)}`);
+        if (!detectBallHit._lastNearDebug || now - detectBallHit._lastNearDebug > 1000) {
+            detectBallHit._lastNearDebug = now;
+            addDebugMessage(`Near! dist:${tipDistance.toFixed(3)}m thresh:${hitThreshold.toFixed(3)}m accel:${totalAcceleration.toFixed(1)}`);
+        }
     }
 
     // Detect hit: club tip is near ball AND moving fast
@@ -472,11 +528,25 @@ function launchBall(initialVelocity) {
 // RESET GAME
 // ============================================
 export function resetGame(imuPermissionGranted, updateStatus, setBallBtn) {
+    addDebugMessage(`🔄 Reset button clicked`);
+
     ballPosition.set = false;
     swingData.recordedMotion = [];
     swingData.hitDetected = false;
     swingTimer.expired = false;
     swingTimer.timeRemaining = 0;
+
+    // Reset debug flags
+    recordSwingMotion._hasLogged = false;
+    recordSwingMotion._lastAccelLog = 0;
+    recordSwingMotion._callCount = 0;
+    detectBallHit._lastNearDebug = 0;
+    checkSwingTimeout._lastDebug = 0;
+    checkSwingTimeout._hasEverRun = false;
+    checkSwingTimeout._settingsNullWarned = false;
+
+    // Reset sensor debug flags
+    resetSensorDebugFlags();
 
     // Reset using tracking module function
     resetTracking();
@@ -484,9 +554,10 @@ export function resetGame(imuPermissionGranted, updateStatus, setBallBtn) {
     // Reset using physics module function
     resetBallFlight();
 
-    // Clear debug log
+    // Clear debug log (but keep the reset message)
+    const resetMsg = `🔄 Game reset complete`;
     debugLog.messages = [];
-    addDebugMessage(`🔄 Game reset`);
+    addDebugMessage(resetMsg);
 
     currentState = GameState.READY_TO_SET_BALL;
     setBallBtn.disabled = false;
@@ -507,6 +578,7 @@ let currentUICallbacks = null;
 
 export function setGameSettings(settings) {
     currentSettings = settings;
+    addDebugMessage(`⚙️ Settings loaded: swingTimeout=${settings.swingTimeout}s`);
 }
 
 export function setUICallbacks(callbacks) {

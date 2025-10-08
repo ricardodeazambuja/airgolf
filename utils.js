@@ -49,12 +49,14 @@ export function project3DToScreen(worldX, worldY, worldZ, canvas) {
 
 export const debugLog = {
     messages: [],
-    maxMessages: 50  // Keep more messages
+    maxMessages: 50,  // Keep more messages
+    messageCount: 0   // Monotonic counter
 };
 
 export function addDebugMessage(message) {
-    const timestamp = new Date().toLocaleTimeString();
-    debugLog.messages.push(`[${timestamp.split(':')[2]}] ${message}`); // Show only seconds
+    debugLog.messageCount++;
+    const counter = debugLog.messageCount.toString().padStart(3, '0');
+    debugLog.messages.push(`[${counter}] ${message}`);
 
     // Keep only last N messages
     if (debugLog.messages.length > debugLog.maxMessages) {
