@@ -164,19 +164,7 @@ function calculateClubTipPosition(settings) {
     let tipY = iy * q.w + iw * -q.y + iz * -q.x - ix * -q.z;
     let tipZ = iz * q.w + iw * -q.z + ix * -q.y - iy * -q.x;
 
-    // Apply phone orientation transformation
-    if (settings.phoneOrientation === 'edge') {
-        // Edge-first: Rotate 90° around Z axis
-        // When holding phone edge-first (landscape), rotate coords
-        const tempX = tipX;
-        const tempY = tipY;
-        const tempZ = tipZ;
-
-        tipX = tempY;   // Phone Y → Screen X (rotated)
-        tipY = tempX;   // Phone X → Screen Y
-        tipZ = tempZ;   // Phone Z stays Z (forward/back)
-    }
-    // For 'screen' orientation, no transformation needed (original behavior)
+    // Screen-first orientation (only supported mode - no transformation needed)
 
     // Offset so tip starts at (0,0,0) instead of (0, -clubLength, 0)
     // Add clubLength to Y so initial position is at origin

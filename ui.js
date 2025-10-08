@@ -134,9 +134,6 @@ function setupEventListeners() {
     cancelSettingsBtn.addEventListener('click', closeSettings);
     
     // Update range displays
-    settingsInputs.hitSensitivity.addEventListener('input', function() {
-        document.getElementById('sensitivityValue').textContent = this.value;
-    });
     settingsInputs.minSwingSpeed.addEventListener('input', function() {
         document.getElementById('speedValue').textContent = parseFloat(this.value).toFixed(1);
     });
@@ -169,14 +166,12 @@ function setupEventListeners() {
 
 function openSettings() {
     // Load current settings into inputs
-    settingsInputs.phoneOrientation.value = settings.phoneOrientation;
     settingsInputs.clubLength.value = settings.clubLength;
     settingsInputs.clubWeight.value = settings.clubWeight;
     settingsInputs.loftAngle.value = settings.loftAngle;
     settingsInputs.ballDiameter.value = settings.ballDiameter;
     settingsInputs.ballWeight.value = settings.ballWeight;
     settingsInputs.hitZoneDiameter.value = settings.hitZoneDiameter;
-    settingsInputs.hitSensitivity.value = settings.hitSensitivity;
     settingsInputs.minSwingSpeed.value = settings.minSwingSpeed;
     settingsInputs.swingTimeout.value = settings.swingTimeout;
     settingsInputs.gravity.value = settings.gravity;
@@ -188,7 +183,6 @@ function openSettings() {
     settingsInputs.soundVolume.value = settings.soundVolume;
     
     // Update range displays
-    document.getElementById('sensitivityValue').textContent = settings.hitSensitivity;
     document.getElementById('speedValue').textContent = settings.minSwingSpeed.toFixed(1);
     document.getElementById('timeoutValue').textContent = settings.swingTimeout;
     document.getElementById('loftValue').textContent = settings.loftAngle;
@@ -202,14 +196,12 @@ function openSettings() {
 
 function saveSettings() {
     // Save all settings
-    settings.phoneOrientation = settingsInputs.phoneOrientation.value;
     settings.clubLength = parseFloat(settingsInputs.clubLength.value);
     settings.clubWeight = parseFloat(settingsInputs.clubWeight.value);
     settings.loftAngle = parseFloat(settingsInputs.loftAngle.value);
     settings.ballDiameter = parseFloat(settingsInputs.ballDiameter.value);
     settings.ballWeight = parseFloat(settingsInputs.ballWeight.value);
     settings.hitZoneDiameter = parseFloat(settingsInputs.hitZoneDiameter.value);
-    settings.hitSensitivity = parseFloat(settingsInputs.hitSensitivity.value);
     settings.minSwingSpeed = parseFloat(settingsInputs.minSwingSpeed.value);
     settings.swingTimeout = parseFloat(settingsInputs.swingTimeout.value);
     settings.gravity = parseFloat(settingsInputs.gravity.value);

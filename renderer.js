@@ -827,7 +827,7 @@ ctx.fillText('Hold phone like a golf club', x, y - 45);
 
 ctx.font = '14px Arial';
 ctx.fillStyle = '#aaa';
-ctx.fillText('(Grip it naturally - edge or screen as club face)', x, y - 20);
+ctx.fillText('(Swing with screen facing forward)', x, y - 20);
 
 ctx.font = 'bold 20px Arial';
 ctx.fillStyle = '#4CAF50';
@@ -835,7 +835,7 @@ ctx.fillText('↓ Tap "Tee Up" below ↓', x, y + 20);
 
 ctx.font = '12px Arial';
 ctx.fillStyle = '#999';
-ctx.fillText('Adjust "Phone Orientation" in Settings if needed', x, y + 45);
+ctx.fillText('Adjust settings if needed (tap ⚙️ button below)', x, y + 45);
 
 ctx.font = 'bold 11px Arial';
 ctx.fillStyle = '#ff6666';

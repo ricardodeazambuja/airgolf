@@ -127,7 +127,6 @@ export function setBallPosition(settings, updateStatus, setBallBtn) {
 
     // Debug
     addDebugMessage(`⚪ Ball set! Tip at [${clubTipTracking.tipPosition.x.toFixed(3)}, ${clubTipTracking.tipPosition.y.toFixed(3)}, ${clubTipTracking.tipPosition.z.toFixed(3)}]`);
-    addDebugMessage(`📱 Grip: ${settings.phoneOrientation === 'edge' ? 'Edge First 🏌️' : 'Screen First 📱'}`);
     addDebugMessage(`Offset: [${clubTipTracking.offset.x.toFixed(3)}, ${clubTipTracking.offset.y.toFixed(3)}, ${clubTipTracking.offset.z.toFixed(3)}]`);
 
     // Start monitoring for swing motion
@@ -372,22 +371,7 @@ function calculateImpactVelocity() {
     let vy = deltaY / dt;
     let vz = deltaZ / dt;
 
-    addDebugMessage(`Raw phone vel: x:${vx.toFixed(2)} y:${vy.toFixed(2)} z:${vz.toFixed(2)} m/s`);
-
-    // Transform phone coordinates → screen/world coordinates
-    if (currentSettings.phoneOrientation === 'edge') {
-        const tempX = vx;
-        const tempY = vy;
-        const tempZ = vz;
-
-        vx = tempY;   // Phone Y → Screen X (rotated)
-        vy = tempX;   // Phone X → Screen Y
-        vz = tempZ;   // Phone Z stays Z (forward/back)
-
-        addDebugMessage(`📱 Edge: 90° rotation applied`);
-    }
-
-    addDebugMessage(`Screen vel: x:${vx.toFixed(2)} y:${vy.toFixed(2)} z:${vz.toFixed(2)} m/s`);
+    addDebugMessage(`Vel: x:${vx.toFixed(2)} y:${vy.toFixed(2)} z:${vz.toFixed(2)} m/s`);
 
     // Apply loft angle transformation
     const loftRadians = currentSettings.loftAngle * Math.PI / 180;

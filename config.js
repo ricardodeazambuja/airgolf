@@ -15,13 +15,11 @@ export const GameState = {
 
 // Default game settings
 export const defaultSettings = {
-    phoneOrientation: 'screen',   // 'screen' or 'edge' - which side is the club face
     clubLength: 1.2,        // meters
     clubWeight: 200,        // grams
     ballDiameter: 4.3,      // cm (regulation golf ball)
     ballWeight: 45.9,       // grams
     hitZoneDiameter: 30,    // cm (detection zone diameter)
-    hitSensitivity: 15,     // degrees (deprecated - using distance now)
     minSwingSpeed: 5.0,     // m/s²
     loftAngle: 25,          // degrees (club face angle - converts downward swing to upward launch)
     gravity: 9.81,          // m/s²
