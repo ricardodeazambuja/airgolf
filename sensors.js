@@ -84,6 +84,12 @@ function initializeIMU() {
 
     imuPermissionGranted = true;
 
+    // Debug: Log platform detection
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const isAndroid = /Android/.test(navigator.userAgent);
+    const platform = isIOS ? 'iOS' : (isAndroid ? 'Android' : 'Desktop');
+    addDebugMessage(`📱 Platform: ${platform}`);
+
     if (updateStatusCallback) {
         updateStatusCallback('✓ IMU Ready! Set ball position to start');
     }

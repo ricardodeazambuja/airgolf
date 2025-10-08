@@ -33,7 +33,16 @@ export const clubTipTracking = {
     lastUpdateTime: 0,
 
     // Frame counter for debug messages (doesn't get filtered like history)
-    frameCount: 0
+    frameCount: 0,
+
+    // Start time for rate measurement
+    startTime: 0,
+
+    // Motion-triggered tracking state
+    trackingActive: false,      // Position tracking only active during motion
+    trackingStartTime: 0,       // When motion was detected
+    motionThreshold: 2.0,       // m/s² - acceleration to trigger tracking
+    maxTrackingDuration: 2.0    // seconds - max time to track
 };
 
 // ============================================
@@ -185,6 +194,7 @@ export function updateClubTipTracking(imuData, settings, ballPosition, swingReco
     // Calculate time delta
     if (clubTipTracking.lastUpdateTime === 0) {
         clubTipTracking.lastUpdateTime = now;
+        clubTipTracking.startTime = now; // Start rate measurement
         return;
     }
 
@@ -197,13 +207,55 @@ export function updateClubTipTracking(imuData, settings, ballPosition, swingReco
     // Increment frame counter
     clubTipTracking.frameCount++;
 
-    // Debug: Check compass availability (first 100 frames only, print every 20 frames)
-    if (clubTipTracking.frameCount <= 100 && clubTipTracking.frameCount % 20 === 0) {
+    // Debug: Check compass availability and measure sampling rate (first 100 frames only)
+    if (clubTipTracking.frameCount === 20) {
         const compassHeading = imuData.orientation.alpha;
         if (compassHeading !== null && compassHeading !== undefined) {
             addDebugMessage(`🧭 9DOF mode: Compass ${compassHeading.toFixed(1)}° (yaw drift correction active)`);
         } else {
             addDebugMessage(`⚠️ 6DOF mode: Compass unavailable (gyro+accel only)`);
+        }
+    }
+
+    // Measure actual sampling rate at frame 100
+    if (clubTipTracking.frameCount === 100) {
+        const elapsedTime = (now - clubTipTracking.startTime) / 1000; // seconds
+        const avgRate = 100 / elapsedTime;
+        const avgDt = elapsedTime / 100 * 1000; // ms per sample
+        addDebugMessage(`📊 IMU Rate: ${avgRate.toFixed(1)} Hz (${avgDt.toFixed(1)}ms/sample)`);
+    }
+
+    // Motion-triggered tracking: Wait for motion to start position tracking
+    if (ballPosition.set && !clubTipTracking.trackingActive) {
+        // Calculate total acceleration magnitude
+        const accelMag = Math.sqrt(
+            (imuData.acceleration.x || 0) ** 2 +
+            (imuData.acceleration.y || 0) ** 2 +
+            (imuData.acceleration.z || 0) ** 2
+        );
+
+        // Check if motion exceeds threshold
+        if (accelMag > clubTipTracking.motionThreshold) {
+            // Motion detected! Start position tracking NOW
+            clubTipTracking.trackingActive = true;
+            clubTipTracking.trackingStartTime = now;
+
+            // Clear history to start fresh tracking (but keep offset - that's the ball position!)
+            clubTipTracking.history = [];
+
+            addDebugMessage(`🚀 Motion detected! (${accelMag.toFixed(1)} m/s²) - Tracking started`);
+        }
+
+        // Not tracking yet - skip position calculation
+        return;
+    }
+
+    // Check max tracking duration
+    if (clubTipTracking.trackingActive) {
+        const trackingDuration = (now - clubTipTracking.trackingStartTime) / 1000;
+        if (trackingDuration > clubTipTracking.maxTrackingDuration) {
+            addDebugMessage(`⏱️ Max tracking time (${clubTipTracking.maxTrackingDuration}s) reached`);
+            // Keep tracking active but warn - hit detection will handle state transition
         }
     }
 
@@ -258,11 +310,16 @@ export function updateClubTipTracking(imuData, settings, ballPosition, swingReco
         });
     }
 
-    // Keep only last 2 seconds of history
-    const twoSecondsAgo = now - 2000;
-    clubTipTracking.history = clubTipTracking.history.filter(
-        h => h.timestamp > twoSecondsAgo
-    );
+    // Keep only history from tracking session (max maxTrackingDuration)
+    if (clubTipTracking.trackingActive) {
+        const trackingStartMs = clubTipTracking.trackingStartTime;
+        clubTipTracking.history = clubTipTracking.history.filter(
+            h => h.timestamp >= trackingStartMs
+        );
+    } else {
+        // Not tracking yet, keep empty
+        clubTipTracking.history = [];
+    }
 }
 
 // ============================================
@@ -276,4 +333,7 @@ export function resetTracking() {
     clubTipTracking.history = [];
     clubTipTracking.lastUpdateTime = 0;
     clubTipTracking.frameCount = 0;
+    clubTipTracking.startTime = 0;
+    clubTipTracking.trackingActive = false;
+    clubTipTracking.trackingStartTime = 0;
 }

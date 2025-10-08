@@ -6,6 +6,7 @@
 import { GameState } from './config.js';
 import { addDebugMessage } from './utils.js';
 import { playLandSound } from './audio.js';
+import { targetState } from './game-logic.js';
 
 // ============================================
 // BALL FLIGHT STATE
@@ -180,6 +181,14 @@ export function updateBallPhysics(deltaTime, settings, swingData, swingRecorder,
             swingData.impactVelocity.z ** 2
         );
 
+        // Calculate distance to target
+        let targetAccuracy = null;
+        if (targetState && targetState.active) {
+            const dx = ballFlight.position.x - targetState.position.x;
+            const dz = ballFlight.position.z - targetState.position.z;
+            targetAccuracy = Math.sqrt(dx * dx + dz * dz);
+        }
+
         // Save shot data
         lastShot.distance = ballFlight.landingDistance;
         lastShot.maxHeight = ballFlight.maxHeight;
@@ -187,11 +196,18 @@ export function updateBallPhysics(deltaTime, settings, swingData, swingRecorder,
         lastShot.timestamp = new Date().toISOString();
         lastShot.velocity = { ...swingData.impactVelocity };
         lastShot.spin = { ...ballFlight.initialSpin };  // Use initial spin, not decayed
+        lastShot.targetAccuracy = targetAccuracy;  // Distance from target
 
         saveToLocalStorage();
 
         setCurrentState(GameState.SHOWING_RESULTS);
-        updateStatus(`⛳ Ball landed! Distance: ${ballFlight.landingDistance.toFixed(2)}m`);
+
+        // Build status message with target accuracy
+        let statusMsg = `⛳ Ball landed! Distance: ${ballFlight.landingDistance.toFixed(2)}m`;
+        if (targetAccuracy !== null) {
+            statusMsg += ` | Target: ${targetAccuracy.toFixed(2)}m away`;
+        }
+        updateStatus(statusMsg);
     }
 }
 
@@ -209,4 +225,7 @@ export function resetBallFlight() {
     ballFlight.landingDistance = 0;
     ballFlight.maxHeight = 0;
     ballFlight.trajectory = [];
+
+    // Reset debug flags
+    updateBallPhysics._nearGroundLogged = false;
 }

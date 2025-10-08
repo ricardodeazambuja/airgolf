@@ -29,6 +29,32 @@ export function getCurrentState() {
 }
 
 // ============================================
+// TARGET STATE
+// ============================================
+export const targetState = {
+    position: { x: 0, y: 0, z: 50 }, // Target position in 3D space
+    active: false                     // Whether target is placed
+};
+
+// Generate target position based on settings
+export function generateTarget(settings) {
+    if (settings.targetMode === 'random') {
+        // Random position within fairway bounds
+        // Fairway: x in [-5, 5], z in [20, 80] (avoid too close/far)
+        targetState.position.x = (Math.random() * 10) - 5;  // -5 to 5 meters
+        targetState.position.z = 20 + (Math.random() * 60); // 20 to 80 meters
+        targetState.position.y = 0; // Ground level
+    } else {
+        // Fixed distance mode
+        targetState.position.x = 0; // Center of fairway
+        targetState.position.z = settings.targetDistance;
+        targetState.position.y = 0;
+    }
+    targetState.active = true;
+    addDebugMessage(`🎯 Target: ${targetState.position.z.toFixed(0)}m away, ${targetState.position.x.toFixed(1)}m ${targetState.position.x > 0 ? 'right' : 'left'}`);
+}
+
+// ============================================
 // BALL POSITION & SWING DATA
 // ============================================
 export const ballPosition = {
@@ -128,6 +154,9 @@ export function setBallPosition(settings, updateStatus, setBallBtn) {
     // Debug
     addDebugMessage(`⚪ Ball set! Tip at [${clubTipTracking.tipPosition.x.toFixed(3)}, ${clubTipTracking.tipPosition.y.toFixed(3)}, ${clubTipTracking.tipPosition.z.toFixed(3)}]`);
     addDebugMessage(`Offset: [${clubTipTracking.offset.x.toFixed(3)}, ${clubTipTracking.offset.y.toFixed(3)}, ${clubTipTracking.offset.z.toFixed(3)}]`);
+
+    // Generate target
+    generateTarget(settings);
 
     // Start monitoring for swing motion
     startSwingDetection();

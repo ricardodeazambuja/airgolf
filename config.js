@@ -29,7 +29,9 @@ export const defaultSettings = {
     showDebug: false,       // Hidden by default to save space
     soundEnabled: true,
     soundVolume: 50,        // 0-100
-    swingTimeout: 10        // seconds until forced reset
+    swingTimeout: 10,       // seconds until forced reset
+    targetMode: 'random',   // 'fixed' or 'random'
+    targetDistance: 50      // meters (used in fixed mode)
 };
 
 // Camera configuration for 3D projection
@@ -50,18 +52,18 @@ export function getCameraForAspectRatio(width, height) {
     const aspectRatio = screenAspectRatio;
 
     if (aspectRatio < 0.75) {
-        // Portrait mobile (tall screen) - Balanced for visibility
+        // Portrait mobile (tall screen) - Move ground lower for better visibility
         return {
             distance: camera.distance * 0.65,  // Moderate distance (2.6m)
             height: camera.height * 0.35,      // Lower camera (0.7m)
-            groundLinePercent: 0.30            // Ground at 30% down screen (more space at top)
+            groundLinePercent: 0.55            // Ground at 55% down screen (closer to bottom)
         };
     } else if (aspectRatio < 1.0) {
         // Portrait tablet
         return {
             distance: camera.distance * 0.75,
             height: camera.height * 0.5,
-            groundLinePercent: 0.50
+            groundLinePercent: 0.60
         };
     } else {
         // Landscape / Desktop

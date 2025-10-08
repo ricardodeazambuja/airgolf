@@ -74,6 +74,8 @@ const elements = {
         hitZoneDiameter: document.getElementById('hitZoneDiameter'),
         minSwingSpeed: document.getElementById('minSwingSpeed'),
         swingTimeout: document.getElementById('swingTimeout'),
+        targetMode: document.getElementById('targetMode'),
+        targetDistance: document.getElementById('targetDistance'),
         gravity: document.getElementById('gravity'),
         airResistance: document.getElementById('airResistance'),
         impactPower: document.getElementById('impactPower'),

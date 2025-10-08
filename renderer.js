@@ -7,6 +7,7 @@ import { project3DToScreen, debugLog, addDebugMessage } from './utils.js';
 import { clubTipTracking } from './tracking.js';
 import { ballFlight } from './physics.js';
 import { imuData, imuPermissionGranted } from './sensors.js';
+import { targetState } from './game-logic.js';
 
 // Canvas references
 let canvas = null;
@@ -194,15 +195,15 @@ function calculateDynamicCamera() {
     const maxHeightRatio = maxY / Math.max(maxDistance, 1); // Height relative to distance
 
     // Base distance on the farthest point, but scale reasonably
-    // For a 50m shot: distance = 4 + 50*0.08 = 8m (not 50m!)
-    const distanceForDepth = camera.distance + maxZ * 0.08;
+    // Reduced scaling factors to minimize trajectory drift (0.08 -> 0.04, 0.15 -> 0.08, 0.3 -> 0.15)
+    const distanceForDepth = camera.distance + maxZ * 0.04;
 
     // Account for height - if ball goes high, pull back slightly
-    const distanceForHeight = camera.distance + maxY * 0.15;
+    const distanceForHeight = camera.distance + maxY * 0.08;
 
     // Account for width - if ball hooks/slices, pull back
     const trajectoryWidth = Math.abs(maxX - minX);
-    const distanceForWidth = camera.distance + trajectoryWidth * 0.3;
+    const distanceForWidth = camera.distance + trajectoryWidth * 0.15;
 
     // Use the maximum, but cap it to avoid extreme zoom
     const requiredDistance = Math.min(
@@ -212,15 +213,15 @@ function calculateDynamicCamera() {
             distanceForWidth,
             camera.distance  // Never closer than default
         ),
-        20  // Maximum distance cap to prevent extreme zoom-out
+        15  // Maximum distance cap (reduced from 20 to 15)
     );
 
-    // Smooth camera transition (lerp)
+    // Smooth camera transition (lerp) - increased smoothing to reduce drift
     if (dynamicCamera.distance === null) {
         dynamicCamera.distance = requiredDistance;
         dynamicCamera.height = camera.height;
     } else {
-        const smoothing = 0.15; // Responsive but smooth
+        const smoothing = 0.08; // Slower transitions to minimize drift (was 0.15)
         dynamicCamera.distance += (requiredDistance - dynamicCamera.distance) * smoothing;
     }
 
@@ -270,6 +271,9 @@ ctx.fillRect(0, 0, canvas.width, canvas.height);
 // Draw ground
 drawGround();
 
+// Draw target (if active)
+drawTarget();
+
 // Update and draw based on state
 switch (gameState()) {
 case GameState.READY_TO_SET_BALL:
@@ -303,9 +307,10 @@ drawBall();
 break;
 
 case GameState.SHOWING_RESULTS:
-calculateDynamicCamera(); // Keep auto-zoom for results view
+// Don't recalculate camera - freeze it at landing position to prevent drift
+// Dynamic camera stays active with frozen values
 drawBallTrajectory();
-drawResults();
+drawBall(); // Draw ball at landing position
 break;
 
 default:
@@ -318,12 +323,17 @@ if (dynamicCamera.active) {
 break;
 }
 
-// Draw debug info on canvas if enabled
+// Draw debug info on canvas if enabled (before results so results are on top)
 drawDebugInfo();
 
 // Draw swing replay if active
 if (swingRecorder.replayMode) {
 drawSwingReplay(deltaTime);
+}
+
+// Draw results overlay LAST so it's always on top
+if (gameState() === GameState.SHOWING_RESULTS) {
+drawResults();
 }
 
 // Continue rendering loop
@@ -809,6 +819,96 @@ ctx.stroke();
 ctx.setLineDash([]);
 }
 
+export function drawTarget() {
+// Draw target with pole and red flag if active
+if (!targetState.active) return;
+
+// Project target position to screen using fixed camera (like ground elements)
+const targetPos = project3DToScreen(
+targetState.position.x,
+targetState.position.y,
+targetState.position.z,
+canvas
+);
+
+if (!targetPos.visible) return;
+
+// Pole configuration
+const poleHeight = 2.5; // meters
+const poleTop = project3DToScreen(
+targetState.position.x,
+poleHeight,
+targetState.position.z,
+canvas
+);
+
+if (!poleTop.visible) return;
+
+// Draw pole (vertical line from ground to top)
+ctx.strokeStyle = '#FFD700'; // Gold color for pole
+ctx.lineWidth = Math.max(2, 3 * targetPos.scale / 100);
+ctx.beginPath();
+ctx.moveTo(targetPos.x, targetPos.y);
+ctx.lineTo(poleTop.x, poleTop.y);
+ctx.stroke();
+
+// Draw flag (red triangle at top of pole)
+const flagWidth = 0.6; // meters
+const flagHeight = 0.4; // meters
+
+// Flag points relative to pole top
+const flagRight = project3DToScreen(
+targetState.position.x + flagWidth,
+poleHeight - flagHeight / 2,
+targetState.position.z,
+canvas
+);
+
+const flagTip = project3DToScreen(
+targetState.position.x + flagWidth,
+poleHeight,
+targetState.position.z,
+canvas
+);
+
+const flagBottom = project3DToScreen(
+targetState.position.x + flagWidth,
+poleHeight - flagHeight,
+targetState.position.z,
+canvas
+);
+
+// Draw flag as triangle
+ctx.fillStyle = '#ff0000'; // Red flag
+ctx.strokeStyle = '#8B0000'; // Dark red border
+ctx.lineWidth = 1;
+ctx.beginPath();
+ctx.moveTo(poleTop.x, poleTop.y); // Pole attachment point
+ctx.lineTo(flagTip.x, flagTip.y);  // Flag tip (right)
+ctx.lineTo(flagBottom.x, flagBottom.y); // Flag bottom
+ctx.closePath();
+ctx.fill();
+ctx.stroke();
+
+// Draw target circle on ground
+const targetRadius = 1.0; // meters
+ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+ctx.lineWidth = Math.max(1, 2 * targetPos.scale / 100);
+ctx.beginPath();
+ctx.arc(targetPos.x, targetPos.y, targetRadius * targetPos.scale, 0, Math.PI * 2);
+ctx.stroke();
+
+// Draw distance label
+ctx.fillStyle = 'white';
+ctx.strokeStyle = 'black';
+ctx.lineWidth = 3;
+ctx.font = `bold ${Math.max(12, 14 * targetPos.scale / 100)}px Arial`;
+ctx.textAlign = 'center';
+const distLabel = `${targetState.position.z.toFixed(0)}m`;
+ctx.strokeText(distLabel, targetPos.x, targetPos.y + 20);
+ctx.fillText(distLabel, targetPos.x, targetPos.y + 20);
+}
+
 export function drawClubPosition() {
 // TODO: Visualize current club position/orientation
 const x = canvas.width / 2;
@@ -849,7 +949,8 @@ if (ballPosition.set) {
 const teePos = project3DToScreen(0, 0, 0, canvas);
 
 if (teePos.visible) {
-const ballRadius = Math.max(8, settings.ballDiameter * teePos.scale * 0.3);
+// Make ball smaller to not block target view - reduced from 0.3 to 0.08
+const ballRadius = Math.max(6, Math.min(settings.ballDiameter * teePos.scale * 0.08, 15));
 
 // Draw hit zone (detection area)
 // Hit detection uses: hitZoneDiameter / 200 meters (diameter → radius, cm → m)
@@ -912,29 +1013,30 @@ ctx.fillStyle = 'rgba(139, 69, 19, 0.8)';
 const teeHeight = Math.max(10, 15 * teePos.scale / 100);
 ctx.fillRect(teePos.x - 1, teePos.y - teeHeight, 2, teeHeight);
 
-// Draw ball glow
-ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+// Draw subtle ball glow (reduced from 1.3 to 1.15)
+ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
 ctx.beginPath();
-ctx.arc(teePos.x, teePos.y - teeHeight, ballRadius * 1.3, 0, Math.PI * 2);
+ctx.arc(teePos.x, teePos.y - teeHeight, ballRadius * 1.15, 0, Math.PI * 2);
 ctx.fill();
 
 // Draw ball
 ctx.fillStyle = 'white';
 ctx.strokeStyle = 'black';
-ctx.lineWidth = 2;
+ctx.lineWidth = 1;
 ctx.beginPath();
 ctx.arc(teePos.x, teePos.y - teeHeight, ballRadius, 0, Math.PI * 2);
 ctx.fill();
 ctx.stroke();
 
-// Text above ball
+// "READY Swing!" message positioned below countdown timer (at top center)
+const centerX = canvas.width / 2;
 ctx.fillStyle = 'yellow';
 ctx.font = 'bold 20px Arial';
 ctx.textAlign = 'center';
 ctx.shadowColor = 'black';
 ctx.shadowBlur = 4;
-ctx.fillText('READY', teePos.x, teePos.y - teeHeight - ballRadius - 25);
-ctx.fillText('Swing!', teePos.x, teePos.y - teeHeight - ballRadius - 5);
+ctx.fillText('READY', centerX, 65);
+ctx.fillText('Swing!', centerX, 88);
 ctx.shadowBlur = 0;
 } else {
 // Fallback if projection fails - draw in center
@@ -955,24 +1057,13 @@ ctx.textAlign = 'center';
 ctx.fillText('READY - Swing!', centerX, centerY - 30);
 }
 }
-
-// Show orientation values
-ctx.fillStyle = 'white';
-ctx.font = '18px Arial';
-ctx.textAlign = 'center';
-const alphaText = imuData.orientation.alpha !== null && imuData.orientation.alpha !== undefined
-    ? `α:${imuData.orientation.alpha.toFixed(0)}°`
-    : 'α:N/A';
-ctx.fillText(alphaText, x, y);
-ctx.fillText(`β:${imuData.orientation.beta.toFixed(0)}°`, x, y + 25);
-ctx.fillText(`γ:${imuData.orientation.gamma.toFixed(0)}°`, x, y + 50);
 }
 
 export function drawCountdownTimer() {
 // Show countdown timer
 if (swingTimer.timeRemaining > 0) {
 const centerX = canvas.width / 2;
-const timerY = 120;
+const timerY = 35; // Moved up from 120 to 35
 
 // Determine color based on time remaining
 let timerColor = '#4CAF50'; // Green
@@ -982,60 +1073,28 @@ timerColor = '#ff4444'; // Red - urgent!
 timerColor = '#ffaa00'; // Orange - warning
 }
 
-// Draw timer background
-ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-ctx.fillRect(centerX - 80, timerY - 30, 160, 50);
-
-// Draw timer text
-ctx.fillStyle = timerColor;
-ctx.font = 'bold 32px Arial';
+// Draw timer text with stroke for visibility (no background box)
+ctx.strokeStyle = 'black';
+ctx.lineWidth = 4;
+ctx.font = 'bold 28px Arial';
 ctx.textAlign = 'center';
-ctx.fillText(Math.ceil(swingTimer.timeRemaining) + 's', centerX, timerY + 5);
+ctx.strokeText(Math.ceil(swingTimer.timeRemaining) + 's', centerX, timerY);
+ctx.fillStyle = timerColor;
+ctx.fillText(Math.ceil(swingTimer.timeRemaining) + 's', centerX, timerY);
 
-// Flash warning when low
+// Flash warning when low (keep subtle flash)
 if (swingTimer.timeRemaining <= 3 && Math.floor(swingTimer.timeRemaining * 2) % 2 === 0) {
-ctx.fillStyle = 'rgba(255, 68, 68, 0.3)';
+ctx.fillStyle = 'rgba(255, 68, 68, 0.15)'; // Reduced opacity from 0.3 to 0.15
 ctx.fillRect(0, 0, canvas.width, canvas.height);
 }
 }
 }
 
 export function drawSwingTrail() {
-// TODO: Draw visual trail showing swing path
-// Use swingData.recordedMotion to visualize swing
-
 // Show countdown timer
 drawCountdownTimer();
 
-// Show swing power meter
-const totalAccel = Math.sqrt(
-imuData.acceleration.x ** 2 +
-imuData.acceleration.y ** 2 +
-imuData.acceleration.z ** 2
-);
-
-const meterWidth = canvas.width * 0.8;
-const meterHeight = 40;
-const meterX = canvas.width * 0.1;
-const meterY = 200;
-
-// Background
-ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-ctx.fillRect(meterX, meterY, meterWidth, meterHeight);
-
-// Power bar
-const powerPercent = Math.min(totalAccel / 20, 1); // Scale to 20 m/s²
-ctx.fillStyle = powerPercent > 0.7 ? '#ff4444' : powerPercent > 0.4 ? '#ffaa00' : '#44ff44';
-ctx.fillRect(meterX, meterY, meterWidth * powerPercent, meterHeight);
-
-// Label
-ctx.fillStyle = 'white';
-ctx.font = 'bold 20px Arial';
-ctx.textAlign = 'center';
-ctx.fillText('SWING POWER', canvas.width / 2, meterY - 10);
-ctx.fillText(totalAccel.toFixed(1) + ' m/s²', canvas.width / 2, meterY + 28);
-
-// Draw club tip trail
+// Draw club tip trail (removed power bar as requested)
 if (clubTipTracking.history.length > 1) {
 const centerX = canvas.width / 2;
 // Center of green area (same as ball position)
@@ -1085,16 +1144,10 @@ ballFlight.position.y,
 ballFlight.position.z
 );
 
-// Debug: log ball position for first few frames
-const timeSinceLaunch = Date.now() - ballFlight.startTime;
-if (timeSinceLaunch < 500) {
-const growing = pos.scale > 100; // Scale increases as ball comes closer
-const direction = growing ? '→YOU⚠️' : '→AWAY✓';
-addDebugMessage(`Ball: z=${ballFlight.position.z.toFixed(1)}m ${direction}`);
-}
-
 // Only draw if ball is visible
-if (!pos.visible) return;
+if (!pos.visible) {
+    return;
+}
 
 // Ball gets smaller with distance (perspective)
 const ballRadius = Math.max(3, settings.ballDiameter * pos.scale * 0.3);
@@ -1162,10 +1215,6 @@ ctx.stroke();
 export function drawBallTrajectory() {
 // Draw the ball's flight path in 3D perspective with enhanced visibility
 if (ballFlight.trajectory.length < 2) {
-    // Debug: trajectory not ready yet
-    if (ballFlight.flying && ballFlight.trajectory.length > 0) {
-        addDebugMessage(`Trajectory: ${ballFlight.trajectory.length} point(s) - need 2+`);
-    }
     return;
 }
 
@@ -1174,11 +1223,6 @@ ctx.lineWidth = 3;
 ctx.lineCap = 'round';
 ctx.lineJoin = 'round';
 
-// Debug: confirm trajectory is being drawn
-if (ballFlight.trajectory.length >= 2 && ballFlight.trajectory.length < 5) {
-    addDebugMessage(`✨ Drawing trajectory: ${ballFlight.trajectory.length} points`);
-}
-
 // Main trajectory line
 ctx.strokeStyle = 'rgba(255, 255, 100, 0.8)'; // Bright yellow-white
 ctx.beginPath();
@@ -1186,7 +1230,8 @@ let hasStarted = false;
 
 for (let i = 0; i < ballFlight.trajectory.length; i++) {
 const point = ballFlight.trajectory[i];
-const pos = projectWithCamera(point.x, point.y, point.z); // Use dynamic camera
+// Use projectWithCamera for consistent perspective during flight
+const pos = projectWithCamera(point.x, point.y, point.z);
 
 if (pos.visible) {
 if (!hasStarted) {
@@ -1243,50 +1288,73 @@ ctx.setLineDash([]);  // Reset to solid
 }
 
 export function drawResults() {
-// Compact overlay at top showing key stats without blocking trajectory view
+// Results overlay showing shot stats
 const centerX = canvas.width / 2;
+const centerY = canvas.height / 2;
 
-// Semi-transparent compact header at top
-ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
-ctx.fillRect(0, 0, canvas.width, 100);
+// Semi-transparent overlay
+ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+const overlayWidth = Math.min(400, canvas.width - 40);
+const overlayHeight = 220;
+const overlayX = centerX - overlayWidth / 2;
+const overlayY = centerY - overlayHeight / 2 - 50; // Slightly above center
+ctx.fillRect(overlayX, overlayY, overlayWidth, overlayHeight);
+
+// Border
+ctx.strokeStyle = '#4CAF50';
+ctx.lineWidth = 3;
+ctx.strokeRect(overlayX, overlayY, overlayWidth, overlayHeight);
 
 // Title
-ctx.fillStyle = 'white';
-ctx.font = 'bold 20px Arial';
+ctx.fillStyle = '#4CAF50';
+ctx.font = 'bold 28px Arial';
 ctx.textAlign = 'center';
-ctx.fillText('⛳ Shot Complete!', centerX, 30);
+ctx.fillText('⛳ Shot Complete!', centerX, overlayY + 40);
 
-// Main stats in one line
-ctx.font = '16px Arial';
-const distText = `${ballFlight.landingDistance.toFixed(1)}m`;
-const heightText = `h:${ballFlight.maxHeight.toFixed(1)}m`;
-const speedText = lastShot.impactSpeed ? `${lastShot.impactSpeed.toFixed(1)}m/s` : '';
+// Distance
+ctx.fillStyle = 'white';
+ctx.font = 'bold 24px Arial';
+ctx.fillText(`Distance: ${ballFlight.landingDistance.toFixed(1)}m`, centerX, overlayY + 80);
 
-ctx.fillText(`${distText} • ${heightText} • ${speedText}`, centerX, 60);
+// Height
+ctx.font = '18px Arial';
+ctx.fillText(`Max Height: ${ballFlight.maxHeight.toFixed(1)}m`, centerX, overlayY + 110);
+
+// Impact speed
+if (lastShot.impactSpeed) {
+ctx.fillText(`Impact: ${lastShot.impactSpeed.toFixed(1)} m/s`, centerX, overlayY + 135);
+}
+
+// Target accuracy
+if (lastShot.targetAccuracy !== null && lastShot.targetAccuracy !== undefined) {
+ctx.font = 'bold 20px Arial';
+ctx.fillStyle = '#ffff00';
+ctx.fillText(`🎯 Target: ${lastShot.targetAccuracy.toFixed(1)}m away`, centerX, overlayY + 165);
+}
 
 // Spin indicator
 if (lastShot.spin) {
 const sidespin = lastShot.spin.y;
-ctx.font = '14px Arial';
-// Threshold: >2 rad/s for hook/slice (sidespinRate = -(vx / ballRadius) * 0.02)
-// For vx=5m/s, ballRadius=0.0215m: sidespin ~4.65 rad/s
+ctx.font = 'bold 16px Arial';
 if (Math.abs(sidespin) > 2) {
 if (sidespin > 0) {
 ctx.fillStyle = '#ff6666';
-ctx.fillText('SLICE →', centerX, 85);
+ctx.fillText('SLICE →', centerX, overlayY + 195);
 } else {
 ctx.fillStyle = '#6666ff';
-ctx.fillText('← HOOK', centerX, 85);
+ctx.fillText('← HOOK', centerX, overlayY + 195);
 }
 } else {
 ctx.fillStyle = '#66ff66';
-ctx.fillText('STRAIGHT', centerX, 85);
+ctx.fillText('STRAIGHT', centerX, overlayY + 195);
 }
 }
 }
 
 export function drawDebugInfo() {
-if (!settings.showDebug) return;
+if (!settings.showDebug) {
+    return;
+}
 
 // Draw debug overlay in top-left corner
 const debugX = 10;

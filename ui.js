@@ -155,7 +155,10 @@ function setupEventListeners() {
     settingsInputs.soundVolume.addEventListener('input', function() {
         document.getElementById('volumeValue').textContent = this.value;
     });
-    
+    settingsInputs.targetDistance.addEventListener('input', function() {
+        document.getElementById('targetDistValue').textContent = this.value;
+    });
+
     // Close modal when clicking outside
     settingsModal.addEventListener('click', function(e) {
         if (e.target === settingsModal) {
@@ -181,7 +184,9 @@ function openSettings() {
     settingsInputs.showDebug.checked = settings.showDebug;
     settingsInputs.soundEnabled.checked = settings.soundEnabled;
     settingsInputs.soundVolume.value = settings.soundVolume;
-    
+    settingsInputs.targetMode.value = settings.targetMode;
+    settingsInputs.targetDistance.value = settings.targetDistance;
+
     // Update range displays
     document.getElementById('speedValue').textContent = settings.minSwingSpeed.toFixed(1);
     document.getElementById('timeoutValue').textContent = settings.swingTimeout;
@@ -190,7 +195,8 @@ function openSettings() {
     document.getElementById('impactPowerValue').textContent = settings.impactPower.toFixed(1);
     document.getElementById('spinValue').textContent = settings.spinEffect;
     document.getElementById('volumeValue').textContent = settings.soundVolume;
-    
+    document.getElementById('targetDistValue').textContent = settings.targetDistance;
+
     settingsModal.classList.add('active');
 }
 
@@ -211,7 +217,9 @@ function saveSettings() {
     settings.showDebug = settingsInputs.showDebug.checked;
     settings.soundEnabled = settingsInputs.soundEnabled.checked;
     settings.soundVolume = parseFloat(settingsInputs.soundVolume.value);
-    
+    settings.targetMode = settingsInputs.targetMode.value;
+    settings.targetDistance = parseFloat(settingsInputs.targetDistance.value);
+
     // Save to localStorage (need to pass lastShot reference)
     saveToLocalStorage(settings, {}); // TODO: pass lastShot from main
     
