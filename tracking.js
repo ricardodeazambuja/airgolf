@@ -1,8 +1,17 @@
 // ============================================
 // CLUB TIP TRACKING MODULE
 // ============================================
-// This module implements 3D club tip position tracking using sensor fusion
-// CRITICAL MODULE: Easy to extend with magnetometer, Kalman filter, etc.
+// Tracks the 3D position of the phone (club tip) using IMU sensor fusion.
+//
+// COORDINATE SYSTEM:
+//   X-axis: Left(-) / Right(+) relative to player
+//   Y-axis: Down(-) / Up(+)
+//   Z-axis: Toward player(-) / Away from player(+)
+//
+// SENSOR FUSION APPROACH:
+//   - Uses Madgwick filter to combine gyroscope + accelerometer (+ magnetometer if available)
+//   - Produces quaternion orientation which is then used to calculate club tip position
+//   - Supports both 6DOF (gyro+accel) and 9DOF (gyro+accel+magnetometer) tracking
 
 import { addDebugMessage } from './utils.js';
 
@@ -46,12 +55,26 @@ export const clubTipTracking = {
 };
 
 // ============================================
-// MADGWICK FILTER - SENSOR FUSION
+// MADGWICK FILTER - SENSOR FUSION ALGORITHM
 // ============================================
-// PURPOSE: Combine accelerometer and gyroscope data for accurate orientation
+// Fuses gyroscope, accelerometer, and optionally magnetometer data to estimate device orientation.
+//
+// WHY MADGWICK:
+//   - Gyroscope measures rotation rate but drifts over time
+//   - Accelerometer provides absolute orientation reference (gravity) but is noisy
+//   - Magnetometer provides absolute heading reference but may have interference
+//   - Madgwick filter combines all three using gradient descent optimization
+//
+// OUTPUT: Quaternion (w, x, y, z) representing device orientation in 3D space
+//
+// PARAMETERS:
+//   gx, gy, gz: Gyroscope angular velocity (deg/s)
+//   ax, ay, az: Accelerometer linear acceleration (m/s²)
+//   mx, my, mz: Magnetometer field strength (optional, use 0 for 6DOF mode)
+//   dt: Time delta since last update (seconds)
 
 function madgwickFilterUpdate(gx, gy, gz, ax, ay, az, dt, mx = 0, my = 0, mz = 0) {
-    // Convert gyroscope degrees/sec to radians/sec
+    // Convert gyroscope from degrees/sec to radians/sec
     gx = gx * Math.PI / 180;
     gy = gy * Math.PI / 180;
     gz = gz * Math.PI / 180;
@@ -150,38 +173,48 @@ function madgwickFilterUpdate(gx, gy, gz, ax, ay, az, dt, mx = 0, my = 0, mz = 0
 // ============================================
 // CLUB TIP POSITION CALCULATION
 // ============================================
-// PURPOSE: Calculate 3D position of club tip based on orientation and club length
+// Transforms the club tip position from phone's local coordinate frame to world coordinates.
+//
+// CONCEPT:
+//   1. Phone is held at grip (origin)
+//   2. Club extends downward from phone by clubLength meters
+//   3. As phone rotates, club tip moves in 3D space
+//   4. Use quaternion rotation to transform local position to world position
+//
+// MATH: world_position = q × local_vector × q*
+//   where q* is the conjugate of quaternion q
 
 function calculateClubTipPosition(settings) {
     const q = clubTipTracking.quaternion;
     const clubLength = settings.clubLength;
 
-    // Club points downward from grip in local coordinates
-    // Local club direction: (0, -clubLength, 0) in grip's reference frame
+    // Define club tip in phone's local coordinate frame
+    // Phone at (0,0,0), club extends downward along -Y axis
     const localX = 0;
     const localY = -clubLength;
     const localZ = 0;
 
-    // Rotate local club vector by quaternion to get world position
-    // q * v * q_conjugate
+    // Apply quaternion rotation: world_pos = q × local_vec × q_conjugate
+    // Step 1: q × local_vec
     const ix = q.w * localX + q.y * localZ - q.z * localY;
     const iy = q.w * localY + q.z * localX - q.x * localZ;
     const iz = q.w * localZ + q.x * localY - q.y * localX;
     const iw = -q.x * localX - q.y * localY - q.z * localZ;
 
+    // Step 2: intermediate × q_conjugate
     let tipX = ix * q.w + iw * -q.x + iy * -q.z - iz * -q.y;
     let tipY = iy * q.w + iw * -q.y + iz * -q.x - ix * -q.z;
     let tipZ = iz * q.w + iw * -q.z + ix * -q.y - iy * -q.x;
 
-    // Screen-first orientation (only supported mode - no transformation needed)
-
-    // Offset so tip starts at (0,0,0) instead of (0, -clubLength, 0)
-    // Add clubLength to Y so initial position is at origin
-    // Then subtract the offset that was stored when ball was set
+    // Apply offset correction:
+    // 1. Add clubLength to Y to move initial position from (0, -clubLength, 0) to (0, 0, 0)
+    // 2. Subtract the offset stored when "Tee Up" was pressed (makes that position the ball)
     clubTipTracking.tipPosition.x = tipX - clubTipTracking.offset.x;
     clubTipTracking.tipPosition.y = (tipY + clubLength) - clubTipTracking.offset.y;
     clubTipTracking.tipPosition.z = tipZ - clubTipTracking.offset.z;
+
 }
+
 
 // ============================================
 // CLUB TIP TRACKING UPDATE
@@ -204,104 +237,86 @@ export function updateClubTipTracking(imuData, settings, ballPosition, swingReco
     // Skip if dt is too large (first frame or tab was inactive)
     if (dt > 0.1) return;
 
-    // Increment frame counter
     clubTipTracking.frameCount++;
 
-    // Debug: Check compass availability and measure sampling rate (first 100 frames only)
-    if (clubTipTracking.frameCount === 20) {
-        const compassHeading = imuData.orientation.alpha;
-        if (compassHeading !== null && compassHeading !== undefined) {
-            addDebugMessage(`🧭 9DOF mode: Compass ${compassHeading.toFixed(1)}° (yaw drift correction active)`);
-        } else {
-            addDebugMessage(`⚠️ 6DOF mode: Compass unavailable (gyro+accel only)`);
-        }
-    }
-
-    // Measure actual sampling rate at frame 100
-    if (clubTipTracking.frameCount === 100) {
-        const elapsedTime = (now - clubTipTracking.startTime) / 1000; // seconds
-        const avgRate = 100 / elapsedTime;
-        const avgDt = elapsedTime / 100 * 1000; // ms per sample
-        addDebugMessage(`📊 IMU Rate: ${avgRate.toFixed(1)} Hz (${avgDt.toFixed(1)}ms/sample)`);
-    }
-
-    // Motion-triggered tracking: Wait for motion to start position tracking
+    // MOTION-TRIGGERED TRACKING
+    // To reduce drift, only track position during active swing motion
     if (ballPosition.set && !clubTipTracking.trackingActive) {
-        // Calculate total acceleration magnitude
         const accelMag = Math.sqrt(
             (imuData.acceleration.x || 0) ** 2 +
             (imuData.acceleration.y || 0) ** 2 +
             (imuData.acceleration.z || 0) ** 2
         );
 
-        // Check if motion exceeds threshold
         if (accelMag > clubTipTracking.motionThreshold) {
-            // Motion detected! Start position tracking NOW
             clubTipTracking.trackingActive = true;
             clubTipTracking.trackingStartTime = now;
-
-            // Clear history to start fresh tracking (but keep offset - that's the ball position!)
             clubTipTracking.history = [];
-
-            addDebugMessage(`🚀 Motion detected! (${accelMag.toFixed(1)} m/s²) - Tracking started`);
+            addDebugMessage(`🚀 Motion detected (${accelMag.toFixed(1)} m/s²)`);
         }
 
-        // Not tracking yet - skip position calculation
-        return;
+        return;  // Skip position calculation until motion detected
     }
 
-    // Check max tracking duration
+    // Warn once if tracking duration exceeds limit
     if (clubTipTracking.trackingActive) {
         const trackingDuration = (now - clubTipTracking.trackingStartTime) / 1000;
-        if (trackingDuration > clubTipTracking.maxTrackingDuration) {
+        if (trackingDuration > clubTipTracking.maxTrackingDuration && !updateClubTipTracking._maxTimeWarned) {
+            updateClubTipTracking._maxTimeWarned = true;
             addDebugMessage(`⏱️ Max tracking time (${clubTipTracking.maxTrackingDuration}s) reached`);
-            // Keep tracking active but warn - hit detection will handle state transition
         }
     }
 
-    // Convert compass heading to magnetometer components (if available)
+    // MAGNETOMETER CONVERSION
+    // Convert compass heading to magnetometer vector components (if compass available)
     let mx = 0, my = 0, mz = 0;
     const compassHeading = imuData.orientation.alpha;
     if (compassHeading !== null && compassHeading !== undefined) {
-        // Convert compass heading (0-360°) to magnetometer vector
-        // alpha: 0° = North, 90° = East, 180° = South, 270° = West
         const headingRad = compassHeading * Math.PI / 180;
         mx = Math.cos(headingRad);  // North component
         my = Math.sin(headingRad);  // East component
-        mz = 0;  // Assuming horizontal (vertical component negligible)
+        mz = 0;  // Horizontal assumption (vertical field negligible)
     }
 
-    // Update orientation using Madgwick filter (6DOF or 9DOF)
+    // ============================================
+    // SENSOR AXIS INVERSIONS
+    // ============================================
+    // WHY WE NEGATE CERTAIN AXES:
+    //   Different devices/browsers report IMU data with varying sign conventions.
+    //   These inversions ensure consistent behavior across platforms.
+    //
+    // INVERTED AXES:
+    //   - Alpha (yaw around Z): Negated so clockwise phone rotation → clockwise tip movement
+    //   - Beta (pitch around X): Negated so raising arms → tip moves UP (not down)
+    //   - Gamma (roll around Y): Negated to maintain right-hand coordinate system
+    //   - Accel X: Negated to match yaw/roll inversions
+    //   - Accel Y: Negated to match pitch inversion
+    //   - Accel Z: NOT negated (forward/back is naturally correct)
+    //
+    // NOTE: In game-logic.js, we negate velocity.x again to compensate for this,
+    //       ensuring ball flies in the correct direction relative to swing.
+
     madgwickFilterUpdate(
-        imuData.rotationRate.alpha || 0,
-        imuData.rotationRate.beta || 0,
-        imuData.rotationRate.gamma || 0,
-        imuData.acceleration.x || 0,
-        imuData.acceleration.y || 0,
+        -(imuData.rotationRate.alpha || 0),
+        -(imuData.rotationRate.beta || 0),
+        -(imuData.rotationRate.gamma || 0),
+        -(imuData.acceleration.x || 0),
+        -(imuData.acceleration.y || 0),
         imuData.acceleration.z || 0,
         dt,
-        mx, my, mz  // Magnetometer (0,0,0 if unavailable → 6DOF mode)
+        mx, my, mz  // Magnetometer components (0 if unavailable = 6DOF mode)
     );
 
-    // Safety check: verify quaternion is valid (first 10 frames)
-    if (clubTipTracking.history.length < 10) {
-        const q = clubTipTracking.quaternion;
-        const qMag = Math.sqrt(q.w * q.w + q.x * q.x + q.y * q.y + q.z * q.z);
-        if (!isFinite(qMag) || Math.abs(qMag - 1.0) > 0.01) {
-            addDebugMessage(`⚠️ Quaternion invalid: mag=${qMag.toFixed(3)} (should be 1.0)`);
-        }
-    }
-
-    // Calculate club tip position from orientation
+    // Transform quaternion orientation to world-space club tip position
     calculateClubTipPosition(settings);
 
-    // Store in history for visualization
+    // Record position in history for hit detection
     clubTipTracking.history.push({
         position: { ...clubTipTracking.tipPosition },
         timestamp: now
     });
 
-    // Record for swing replay if recording is active
+    // Record for swing replay (if enabled)
     if (swingRecorder.isRecording && swingRecorder.currentRecording && ballPosition.set) {
         swingRecorder.currentRecording.tipPath.push({
             position: { ...clubTipTracking.tipPosition },
@@ -310,14 +325,12 @@ export function updateClubTipTracking(imuData, settings, ballPosition, swingReco
         });
     }
 
-    // Keep only history from tracking session (max maxTrackingDuration)
+    // Limit history to current tracking session only
     if (clubTipTracking.trackingActive) {
-        const trackingStartMs = clubTipTracking.trackingStartTime;
         clubTipTracking.history = clubTipTracking.history.filter(
-            h => h.timestamp >= trackingStartMs
+            h => h.timestamp >= clubTipTracking.trackingStartTime
         );
     } else {
-        // Not tracking yet, keep empty
         clubTipTracking.history = [];
     }
 }
@@ -336,4 +349,8 @@ export function resetTracking() {
     clubTipTracking.startTime = 0;
     clubTipTracking.trackingActive = false;
     clubTipTracking.trackingStartTime = 0;
+
+    // Reset debug flags
+    calculateClubTipPosition._lastYDebug = 0;
+    updateClubTipTracking._maxTimeWarned = false;
 }

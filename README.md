@@ -14,13 +14,13 @@ Turn your phone into a golf club. Uses IMU sensors to track swing motion and sim
 
 2. **Tee Up**
    - Tap "Tee Up" button
-   - Hold phone like a golf club (bottom edge = club head)
-   - Ball appears with yellow circle (hit zone)
+   - Hold phone like a golf club (screen facing forward)
+   - Ball appears on tee - ready to swing!
 
 3. **Swing**
-   - Pull back (backswing)
-   - Swing through the ball (fast motion required)
-   - Hit is detected when club tip enters yellow zone at speed
+   - Pull back (backswing ~15cm minimum)
+   - Swing through the ball with fast motion
+   - Hit is automatically detected based on position and speed
 
 4. **Watch Ball Flight**
    - Yellow line shows trajectory
@@ -49,10 +49,9 @@ Turn your phone into a golf club. Uses IMU sensors to track swing motion and sim
 - 25° = 5-iron (medium)
 - 42° = 9-iron (high, short)
 
-### Phone Grip
+### Phone Orientation
 
-**Swing Style**
-- **Screen First**: Swing with screen facing forward
+Hold the phone with the **screen facing forward** toward the ball/target direction, like you're holding a golf club.
 
 ### Golf Ball
 
@@ -64,10 +63,10 @@ Turn your phone into a golf club. Uses IMU sensors to track swing motion and sim
 - Regulation weight is 45.9g
 - Currently display-only, not used in physics
 
-**Hit Zone Diameter** (5-100cm, default: 30cm)
-- Yellow circle size around ball
-- Smaller = harder to hit (precise)
-- Larger = easier to hit (forgiving)
+**Hit Zone Diameter** (5-100cm, default: 40cm)
+- Detection radius around ball
+- Smaller = harder to hit (requires precision)
+- Larger = easier to hit (more forgiving)
 
 ### Hit Detection
 
@@ -139,18 +138,15 @@ Turn your phone into a golf club. Uses IMU sensors to track swing motion and sim
 - Try in Safari (not Chrome/Firefox on iOS)
 
 ### Can't hit the ball
-- **Yellow circle too small**: Increase "Hit Zone Diameter" in settings
-- **Not swinging fast enough**: Lower "Minimum Swing Speed"
-- **No backswing**: Pull phone away 15cm+ before swinging through
-- **Check club tip indicator**: Green dot shows where club is
-  - Green = in hit zone
-  - Yellow = near
-  - Red = too far
+- **Hit zone too small**: Increase "Hit Zone Diameter" in settings
+- **Not swinging fast enough**: Lower "Minimum Swing Speed" setting
+- **No backswing**: Pull phone away at least 15cm before swinging through
+- **Enable debug mode**: Shows real-time tracking data and hit detection info
 
 ### Ball flies wrong direction
-- Check "Swing Style" in Phone Grip settings
-- Try switching between "Edge First" and "Screen First"
-- Look at debug info (enable in Display settings) to see velocity
+- Make sure screen is facing forward/toward target
+- Enable debug info to see velocity vectors
+- Check that you're swinging in the direction you want the ball to go
 
 ### Always shows "STRAIGHT" (never hook/slice)
 - Sidespin requires horizontal movement during swing
@@ -199,16 +195,27 @@ python3 -m http.server 4443 --bind localhost --protocol HTTP/1.1
 
 ### Architecture
 - **Modular ES6**: 11 separate modules for physics, tracking, rendering, etc.
-- **Madgwick Filter**: Sensor fusion (gyro + accel → orientation)
-- **Magnus Effect**: Realistic ball spin physics
+- **Madgwick Filter**: 9DOF sensor fusion (gyro + accel + magnetometer → quaternion orientation)
+- **Magnus Effect**: Realistic ball spin physics (hook/slice)
 - **Dynamic Camera**: Auto-zoom to fit ball trajectory
 
 ### Key Modules
-- `tracking.js` - Club tip position tracking (critical module)
-- `physics.js` - Ball flight simulation
-- `sensors.js` - IMU data collection
-- `game-logic.js` - Hit detection & game state
-- `renderer.js` - 3D visualization
+- `tracking.js` - 3D club tip position tracking via quaternion rotation
+- `physics.js` - Ball flight simulation (gravity, drag, Magnus effect)
+- `sensors.js` - IMU data collection and preprocessing
+- `game-logic.js` - Hit detection & velocity calculation
+- `renderer.js` - 3D perspective rendering
+
+### Documentation
+
+For detailed technical information including:
+- Sensor fusion algorithms (Madgwick filter)
+- 3D transformations (quaternion math)
+- Coordinate system mappings
+- Physics calculations (loft angle, spin, velocity)
+- Troubleshooting guide
+
+See **[TECHNICAL_DOCUMENTATION.md](TECHNICAL_DOCUMENTATION.md)**
 
 ### Browser Requirements
 - **iOS**: Safari 13+ (motion permissions required)

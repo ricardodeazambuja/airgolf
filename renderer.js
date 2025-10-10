@@ -952,61 +952,8 @@ if (teePos.visible) {
 // Make ball smaller to not block target view - reduced from 0.3 to 0.08
 const ballRadius = Math.max(6, Math.min(settings.ballDiameter * teePos.scale * 0.08, 15));
 
-// Draw hit zone (detection area)
-// Hit detection uses: hitZoneDiameter / 200 meters (diameter → radius, cm → m)
-// So visual should scale from meters: (diameter / 200) * scale
-const hitZoneRadiusMeters = settings.hitZoneDiameter / 200; // Convert cm diameter to m radius
-const hitZoneRadius = Math.max(10, hitZoneRadiusMeters * teePos.scale);
-ctx.fillStyle = 'rgba(255, 255, 0, 0.1)';
-ctx.strokeStyle = 'rgba(255, 255, 0, 0.5)';
-ctx.lineWidth = 2;
-ctx.beginPath();
-ctx.arc(teePos.x, teePos.y, hitZoneRadius, 0, Math.PI * 2);
-ctx.fill();
-ctx.stroke();
-
-// Draw club tip position indicator
-const clubTipPos = project3DToScreen(
-clubTipTracking.tipPosition.x,
-clubTipTracking.tipPosition.y,
-clubTipTracking.tipPosition.z,
-canvas
-);
-
-if (clubTipPos.visible) {
-const tipDist = Math.sqrt(
-clubTipTracking.tipPosition.x ** 2 +
-clubTipTracking.tipPosition.y ** 2 +
-clubTipTracking.tipPosition.z ** 2
-);
-
-// Color based on distance from ball
-let tipColor = 'yellow';
-if (tipDist < settings.hitZoneDiameter / 200) {
-tipColor = 'lime'; // In hit zone!
-} else if (tipDist > 0.5) {
-tipColor = 'red'; // Too far
-}
-
-// Draw club tip dot
-ctx.fillStyle = tipColor;
-ctx.strokeStyle = 'black';
-ctx.lineWidth = 2;
-ctx.beginPath();
-ctx.arc(clubTipPos.x, clubTipPos.y, 6, 0, Math.PI * 2);
-ctx.fill();
-ctx.stroke();
-
-// Draw line from ball to club tip
-ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-ctx.lineWidth = 1;
-ctx.setLineDash([2, 2]);
-ctx.beginPath();
-ctx.moveTo(teePos.x, teePos.y);
-ctx.lineTo(clubTipPos.x, clubTipPos.y);
-ctx.stroke();
-ctx.setLineDash([]);
-}
+// Dot and hit zone visualization REMOVED
+// The 3D→2D projection makes these confusing - users should rely on natural swing feel
 
 // Draw tee marker
 ctx.fillStyle = 'rgba(139, 69, 19, 0.8)';
@@ -1094,46 +1041,8 @@ export function drawSwingTrail() {
 // Show countdown timer
 drawCountdownTimer();
 
-// Draw club tip trail (removed power bar as requested)
-if (clubTipTracking.history.length > 1) {
-const centerX = canvas.width / 2;
-// Center of green area (same as ball position)
-const groundTop = canvas.height * 0.7;
-const centerY = groundTop + (canvas.height - groundTop) / 2;
-const scale = 100; // Scale factor for visualization
-
-ctx.strokeStyle = 'rgba(255, 255, 0, 0.8)';
-ctx.lineWidth = 3;
-ctx.beginPath();
-
-clubTipTracking.history.forEach((point, i) => {
-const screenX = centerX + point.position.x * scale;
-const screenY = centerY - point.position.y * scale;
-
-if (i === 0) {
-ctx.moveTo(screenX, screenY);
-} else {
-ctx.lineTo(screenX, screenY);
-}
-});
-
-ctx.stroke();
-
-// Draw current club tip position
-if (clubTipTracking.history.length > 0) {
-const current = clubTipTracking.history[clubTipTracking.history.length - 1];
-const tipX = centerX + current.position.x * scale;
-const tipY = centerY - current.position.y * scale;
-
-ctx.fillStyle = '#ffff00';
-ctx.beginPath();
-ctx.arc(tipX, tipY, 8, 0, Math.PI * 2);
-ctx.fill();
-ctx.strokeStyle = '#ff0000';
-ctx.lineWidth = 2;
-ctx.stroke();
-}
-}
+// Trail visualization REMOVED - confusing 3D→2D projection
+// Users should rely on natural swing feel instead
 }
 
 export function drawBall() {
